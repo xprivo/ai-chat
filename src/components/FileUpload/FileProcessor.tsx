@@ -121,6 +121,12 @@ export function FileProcessor({ onFileProcessed, onClose, existingFileNames, cha
         return;
       }
 
+      if (content.length > 80000) {
+        setError(t('fileSizeTooBig'));
+        setIsProcessing(false);
+        return;
+      }
+
       setProcessingStatus(t('finalizing'));
 
       const fileRef: FileReference = {

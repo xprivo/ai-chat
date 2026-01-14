@@ -138,9 +138,6 @@ const ImagePreview = ({ file }) => {
 };
 
 
-/**
- * Main view for when a file is selected and needs processing.
- */
 const ImageProcessing = ({
     selectedFile,
     imageName,

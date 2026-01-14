@@ -1,43 +1,44 @@
 import ExcelJS from 'exceljs';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.js',
-  import.meta.url
-).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
-// PDF parsing function using PDF.js
 async function extractPDFText(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
+
     let fullText = '';
-    
+
     // Extract text from each page
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-      
+
       const pageText = textContent.items
         .map((item: any) => item.str)
         .join(' ');
-      
+
       if (pageText.trim()) {
         fullText += `Page ${pageNum}:\n${pageText}\n\n`;
       }
     }
-    
-    if (fullText.trim().length < 10) {
-      throw new Error('PDF appears to contain no readable text content');
+
+    if (fullText.trim().length === 0) {
+      throw new Error('PDF appears to contain no readable text content. The file may be image-based.');
     }
-    
+
     return fullText.trim();
   } catch (error) {
     console.error('PDF extraction error:', error);
-    throw new Error('Could not extract text from PDF. The file may be image-based or corrupted.');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('PDF error details:', errorMessage);
+    if (errorMessage.includes('no readable text')) {
+      throw error;
+    }
+    throw new Error(`PDF extraction failed: ${errorMessage}`);
   }
 }
 
@@ -71,7 +72,7 @@ async function extractExcelText(file: File): Promise<string> {
       }
     });
 
-    if (extractedText.trim().length < 10) {
+    if (extractedText.trim().length === 0) {
       throw new Error('Excel file appears to be empty or contains no readable data');
     }
 
@@ -86,11 +87,11 @@ async function extractWordText(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
-    
-    if (!result.value || result.value.trim().length < 10) {
+
+    if (!result.value || result.value.trim().length === 0) {
       throw new Error('Word document appears to be empty or contains no readable text');
     }
-    
+
     return result.value.trim();
   } catch (error) {
     console.error('Word extraction error:', error);
@@ -99,10 +100,10 @@ async function extractWordText(file: File): Promise<string> {
 }
 
 export async function extractTextFromFile(file: File): Promise<string> {
-  const maxSize = 10 * 1024 * 1024; // 10MB
+  const maxSize = 50 * 1024 * 1024; // 50MB
   
   if (file.size > maxSize) {
-    throw new Error('File size exceeds 10MB limit');
+    throw new Error('File size exceeds 50MB limit');
   }
 
   const fileType = file.type.toLowerCase();
