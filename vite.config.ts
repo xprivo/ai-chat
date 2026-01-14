@@ -31,7 +31,6 @@ export default defineConfig({
           // Separate chunk for UI components
           'ui-components': ['lucide-react'],
           // RevenueCat bundled separately for iOS
-          //'revenuecat': ['@revenuecat/purchases-capacitor'],
           // Vendor chunk for React and core dependencies
           'vendor': ['react', 'react-dom', 'localforage']
         }
@@ -40,7 +39,16 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['lucide-react'],
-    include: ['pdfjs-dist', 'pdfjs-dist/build/pdf.worker.min.js']
+    include: [
+      'pdfjs-dist',
+      'pdfjs-dist/build/pdf.worker.min.js',
+      'jspdf',
+      'jspdf-autotable',
+      'docx',
+      'mammoth',
+      'exceljs',
+      'heic2any'
+    ]
   },
   define: {
     global: 'globalThis',

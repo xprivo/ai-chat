@@ -5,7 +5,7 @@ export const SETUP_CONFIG = {
   // App branding
   appName: 'xPrivo',
 
-  appVersion: '1.2.0',
+  appVersion: '2.0.0',
 
   // Branding - Icon in the Menu
   menu_icon: '/assets/logo/xprivo-app.png',
@@ -95,8 +95,10 @@ export const SETUP_CONFIG = {
     enabled: true
   },
 
+  get_pro_models: false, // Should be false unless you show special PRO models
+
   // Not serving over a privacy-first provider? Probably set the following to false
-  show_protection_badge: false,
+  show_protection_badge: true,
 
   acceptConsentBanner: false, //important to make this true if you use non-functional cookies
 
