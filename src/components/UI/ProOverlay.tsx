@@ -8,7 +8,7 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { KeyInputOverlay } from './KeyInputOverlay';
 import { KeyGeneratedOverlay } from './KeyGeneratedOverlay';
 import { AccountCreationOverlay } from './AccountCreationOverlay';
-import { getProProductPrice, purchaseProSubscription, getAppUserID, checkProSubscriptionStatus } from '../../utils/revenueCatDummy';
+import { getProProductPrice, purchaseProSubscription, getAppUserID, checkProSubscriptionStatus, loginUserAnonym } from '../../utils/revenueCatDummy';
 import { fetchQuotaInfo, QuotaInfo } from '../../utils/quotaApi';
 import { SETUP_CONFIG } from '../../config/setup';
 
@@ -17,7 +17,10 @@ interface ProOverlayProps {
   onClose: () => void;
 }
 
+// Global cache variables
 let cachedPrice: string | null = null;
+let cachedProRequests: string | null = null;
+
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
@@ -36,13 +39,15 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
   const [isMobile, setIsMobile] = useState(false);
   const [price, setPrice] = useState<string | null>(null);
+  // Default to 250+ or cached value until loaded
+  const [proRequestsCount, setProRequestsCount] = useState<number>(cachedProRequests || 50); 
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [isLoadingQuota, setIsLoadingQuota] = useState(false);
 
   const privacyPolicyUrl = SETUP_CONFIG.privacyPolicyUrl;
   const termsOfServiceUrl = SETUP_CONFIG.termsOfServiceUrl;
-   
+    
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       const platform = Capacitor.getPlatform();
@@ -52,50 +57,69 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
     }
   }, []);
 
-  useEffect(() => {
-    const fetchPrice = async () => {
-      if (isMobile) {
-        try {
-          const appStorePrice = await getProProductPrice();
-          if (appStorePrice) {
-            setPrice(appStorePrice);
-            cachedPrice = appStorePrice;
-          } else {
-            setPrice('8€');
-          }
-        } catch (error) {
-          console.error('Error fetching App Store price:', error);
-          setPrice('8€');
-        } finally {
-          setIsLoadingPrice(false);
-        }
-        return;
-      }
 
-      if (cachedPrice) {
-        setPrice(cachedPrice);
-        setIsLoadingPrice(false);
-        return;
+  useEffect(() => {
+    const fetchPriceAndRequests = async () => {
+      if (cachedPrice) setPrice(cachedPrice);
+      if (cachedProRequests) setProRequestsCount(cachedProRequests);
+
+      const apiFetchPromise = fetch('https://www.xprivo.com/auth/pricing')
+        .then(async (res) => {
+          if (!res.ok) return null;
+          return await res.json();
+        })
+        .catch((err) => {
+          console.error('Error fetching API pricing:', err);
+          return null;
+        });
+
+      let storeFetchPromise = Promise.resolve(null);
+      if (isMobile) {
+        storeFetchPromise = getProProductPrice().catch((err) => {
+          console.error('Error fetching App Store price:', err);
+          return null;
+        });
       }
 
       try {
-        const response = await fetch('https://www.xprivo.com/auth/pricing');
-        if (!response.ok) {
-          throw new Error('Failed to fetch price');
+        const [apiData, appStorePrice] = await Promise.all([apiFetchPromise, storeFetchPromise]);
+
+        if (isMobile) {
+            if (appStorePrice) {
+                setPrice(appStorePrice);
+                cachedPrice = appStorePrice;
+            } else if (!cachedPrice) {
+                setPrice('8€');
+            }
+
+            if (apiData && apiData.pro_requests) {
+                setProRequestsCount(apiData.pro_requests);
+                cachedProRequests = apiData.pro_requests;
+            }
+        } else {
+            if (apiData) {
+                if (apiData.full_price) {
+                    setPrice(apiData.full_price);
+                    cachedPrice = apiData.full_price;
+                }
+                if (apiData.pro_requests) {
+                    setProRequestsCount(apiData.pro_requests);
+                    cachedProRequests = apiData.pro_requests;
+                }
+            } else if (!cachedPrice) {
+                 setPrice('8€');
+            }
         }
-        const data = await response.json();
-        const fetchedPrice = data.full_price || '8€';
-        setPrice(fetchedPrice);
-        cachedPrice = fetchedPrice;
+
       } catch (error) {
-        console.error('Error fetching price:', error);
-        setPrice('8€');
+        console.error('Error in fetch sequence:', error);
+        if (!price && !cachedPrice) setPrice('8€');
       } finally {
         setIsLoadingPrice(false);
       }
     };
 
-    fetchPrice();
+    fetchPriceAndRequests();
   }, [isMobile]);
 
   React.useEffect(() => {
@@ -142,7 +166,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
-   
+    
   const handleLogout = () => {
     localStorage.removeItem('pro_key');
 
@@ -151,7 +175,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
       detail: { isSignedUp: false }
     }));
     window.dispatchEvent(new Event('storage'));
-    
+     
     setIsProUser(false);
     onClose();
   };
@@ -178,30 +202,36 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   };
 
   const handleUpgradeToPro = async () => {
-    
+     
     if (isMobile) {
       setIsUpgrading(true);
       try {
         const appUserID = await getAppUserID();
-   
+    
         if (!appUserID) {
           throw new Error('Failed to get user ID');
         }
-   
+
+        const loginSuccess = await loginUserAnonym(appUserID);
+
+        if (!loginSuccess) {
+          throw new Error('Failed to login with anonymous id');
+        }
+    
         const hasActiveSubscription = await checkProSubscriptionStatus();
-   
+    
         if (hasActiveSubscription) {
           setIsUpgrading(false);
           onClose();
-   
+    
           await delay(100);
-   
+    
           setIsLoadingKey(true);
           setGeneratedKey('');
           setShowKeyGenerated(true);
-   
+    
           await delay(2000);
-   
+    
           const checkSubscriberResponse = await fetch('https://www.xprivo.com/auth/checknewsubscriber', {
             method: 'POST',
             headers: {
@@ -209,43 +239,43 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
             },
             body: JSON.stringify({ subscriber_id: appUserID })
           });
-   
+    
           if (!checkSubscriberResponse.ok) {
             throw new Error('Failed to retrieve account key');
           }
-   
+    
           const checkSubscriberData = await checkSubscriberResponse.json();
           const proKey = checkSubscriberData.pro_key;
-   
+    
           if (!proKey) {
             throw new Error('No pro key received');
           }
-   
+    
           setGeneratedKey(proKey);
           setIsLoadingKey(false);
           return;
         }
-   
+    
         // No active subscription, proceed with purchase
         const result = await purchaseProSubscription();
-   
+    
         if (result.success && result.customerInfo) {
           const entitlements = result.customerInfo.entitlements.active;
-   
+    
           if ('pro' in entitlements) {
             setIsUpgrading(false);
             onClose();
-   
+    
             await delay(100);
-   
+    
             setIsLoadingKey(true);
             setGeneratedKey('');
             setShowKeyGenerated(true);
-   
+    
             await delay(4000);
-   
+    
             //console.log('[Purchase] Checking subscriber with ID:', appUserID);
-   
+    
             if (!appUserID) {
               throw new Error('No subscriber ID available');
             }
@@ -265,7 +295,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 console.error('[Purchase] Network error name:', networkError.name);
                 throw new Error('Network error: Could not reach server');
               }
-   
+    
               if (!response.ok) {
                 let errorBody = '';
                 try {
@@ -279,7 +309,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
               }
               return response.json();
             };
-   
+    
             let checkSubscriberData;
             try {
               // First attempt
@@ -288,18 +318,18 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
               console.warn(`[Purchase] First attempt failed (${error.message}). Waiting before retry.`);
 
               await delay(10000);
-   
+    
               console.log('[Purchase] Retrying fetch...');
 
               checkSubscriberData = await fetchKey();
             }
 
             const proKey = checkSubscriberData.pro_key;
-   
+    
             if (!proKey) {
               throw new Error('No pro key received');
             }
-   
+    
             setGeneratedKey(proKey);
             setIsLoadingKey(false);
           } else {
@@ -328,13 +358,13 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
   const handleKeyInputSuccess = (key: string) => {
     document.cookie = `pro_key=${key}; path=/; max-age=${365 * 24 * 60 * 60}`; // 1 year
-    
+     
     localStorage.setItem('accountStatus', 'pro');
     window.dispatchEvent(new CustomEvent('accountStatusChanged', { 
       detail: { isSignedUp: true }
     }));
     window.dispatchEvent(new Event('storage'));
-    
+     
     setShowKeyInput(false);
     onClose();
   };
@@ -405,9 +435,21 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-4 border border-blue-200 dark:border-blue-700">
                   <div className="flex items-center gap-2 mb-1">
                     <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    <div className="text-[15px] md:text-2xl font-bold text-blue-600 dark:text-blue-400">{quotaInfo.requests_remaining.toLocaleString()}</div>
+                    <div className="text-[15px] md:text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {(quotaInfo.requests_remaining || 0).toLocaleString()}
+                    </div>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">{t('quota_requests_remaining')}</div> 
+                  <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">{t('quota_requests_remaining')}</div>
+                </div>
+               
+                <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-xl p-4 border border-amber-200 dark:border-amber-700">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    <div className="text-[15px] md:text-2xl font-bold text-amber-600 dark:text-amber-400">
+                      {(quotaInfo.pro_requests_remaining || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">{t('quota_pro_requests_remaining')}</div>
                 </div>
                
                 <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-4 border border-purple-200 dark:border-purple-700">
@@ -423,16 +465,15 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">
                     {quotaInfo.status === 'renews' ? t('quota_renews') : t('quota_ends')}
-                    {quotaInfo.expired ? 
-                      <div className="flex items-center">
-                        <RefreshCwOff className="w-5 h-5 text-red-600 dark:text-red-400" />
-                        <b className="ml-1">{t('quota_expired')}</b>
-                      </div> 
-                    : null
-                    }
+                    {quotaInfo.expired ? (
+                      <div className="flex items-center justify-center mt-1">
+                        <RefreshCwOff className="w-4 h-4 text-red-600 dark:text-red-400 mr-1" />
+                        <span className="text-red-600 dark:text-red-400 font-bold">{t('quota_expired')}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-                
+               
               </div>
             ) : null}
 
@@ -543,11 +584,21 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
               <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-white" />
+                  <ArrowBigUpDash className="w-4 h-4 text-white" />
                 </div>
                 <div>
                   <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none">{t('upgrade_pro_feature1_title')}</div>
                   <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature1_description')}</div>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  {/* UPDATED TO SHOW DYNAMIC REQUEST COUNT */}
+                  <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none"> {t('upgrade_pro_feature5_title', { proRequestsCount: proRequestsCount })}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature5_description')}</div>
                 </div>
               </div>
               <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -566,15 +617,6 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 <div>
                   <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none">{t('upgrade_pro_feature3_title')}</div>
                   <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature3_description')}</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Globe className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none">{t('upgrade_pro_feature4_title')}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature4_description')}</div>
                 </div>
               </div>
             </div>
@@ -598,7 +640,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
               <h1 className="text-base font-bold text-center text-gray-900 dark:text-white hyphens-none">
                 {t('subscription_details')}
               </h1>
-        
+       
               <div className="mt-8 space-y-8">
                 <div>
                   <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
@@ -608,7 +650,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                    {t('subscription_monthly_text')}
                   </p>
                 </div>
-        
+       
                 <div>
                   <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
                     {t('subscription_auto_extend')}
@@ -617,7 +659,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                     {t('subscription_auto_extend_text')}
                   </p>
                 </div>
-        
+       
                 <div>
                   <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
                     {t('subscription_cancellation')}
@@ -626,7 +668,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                     {t('subscription_cancellation_text')}
                   </p>
                 </div>
-        
+       
               </div>
 
                <div className="mt-10 flex flex-wrap justify-between gap-x-4 gap-y-2">
@@ -634,7 +676,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   <a href={termsOfServiceUrl} onClick={(e) => handleLinkClick(e, termsOfServiceUrl)} target="_blank" rel="noopener noreferrer" className="text-sm text-green-600 dark:text-green-500 hover:underline hyphens-none">{t('common_termsOfService')}</a>
               </div>
             </div>
-        
+       
             ) : null }
 
             <small>{ isMobile ? null : <span className="hyphens-none">* {t('upgrade_no_tax')}</span> } </small>

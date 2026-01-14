@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, AlertCircle, Crown, ShieldCheck } from 'lucide-react';
+import { X, AlertCircle, Crown, ShieldCheck, Zap } from 'lucide-react';
 import { Portal } from './Portal';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -49,13 +49,17 @@ export function ErrorOverlay({
           >
             <X size={20} />
           </button>
-
+ 
           <div className="p-6 text-center">
            
             {icon === 'warning' ? ( 
               <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
               </div>
+            ) : icon === 'zap' ? ( 
+                 <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Zap className="w-14 h-14 text-green-600 dark:text-green-400" />
+                  </div>
             ) : icon === 'protected' ? ( 
                  <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                     <ShieldCheck className="w-14 h-14 text-green-600 dark:text-green-400" />

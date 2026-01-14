@@ -140,18 +140,18 @@ export function KeyGeneratedOverlay({ isOpen, onClose, generatedKey, skipPayment
               <div className="flex gap-3">
                 <button
                   onClick={handleCopyKey}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+                  className="flex-none flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
                 >
-                  {copied ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  <span>{copied ? t('copied_confirmation') : t('copy_key_action')}</span>
+                  {copied ? <CheckCircle className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+                  <span className="whitespace-nowrap">{copied ? t('copied_confirmation') : t('copy_key_action')}</span>
                 </button>
                 
                 <button
                   onClick={handleDownloadKey}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+                  className="flex-1 min-w-0 flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>{t('account_download_key')}</span>
+                  <Download className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{t('account_download_key')}</span>
                 </button>
               </div>
             </div>
