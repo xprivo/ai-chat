@@ -74,6 +74,13 @@ export interface Expert {
 export type Language = 'en' | 'fr' | 'de' | 'es' | 'it' | 'nl' | 'pl' | 'da' | 'pt' | 'bg' | 'el' | 'sv' | 'cs' | 'hr' | 'sl' | 'hi';
 export type Theme = 'light' | 'dark' | 'system';
 
+export interface ModelMetadata {
+  name?: string;
+  ispremium: boolean;
+  logo_url: string;
+  reasoning: boolean;
+}
+
 export interface AIEndpoint {
   id: string;
   name: string;
@@ -82,11 +89,13 @@ export interface AIEndpoint {
   models: string[];
   enableWebSearch?: boolean;
   enableSafeWebSearch?: boolean;
+  modelMetadata?: Record<string, ModelMetadata>;
 }
 
 export interface AISettings {
   endpoints: AIEndpoint[];
   selectedModel: string;
+  extraModels?: Record<string, ModelMetadata>;
 }
 
 export interface APIMessage {

@@ -1,5 +1,6 @@
 export interface QuotaInfo {
   requests_remaining: number;
+  pro_requests_remaining: number;
   expires: number;
   status: 'renews' | 'ends';
   expired: boolean;
@@ -22,6 +23,7 @@ export async function fetchQuotaInfo(proKey: string): Promise<QuotaInfo | null> 
     const data = await response.json();
     return {
       requests_remaining: data.requests_remaining,
+      pro_requests_remaining: data.pro_requests_remaining,
       expires: data.expires,
       status: data.status,
       expired: data.expired

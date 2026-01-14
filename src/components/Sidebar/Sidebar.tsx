@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 
 import { Browser } from '@capacitor/browser';
 import { restorePurchases } from '../../utils/revenueCatDummy';
-import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart } from 'lucide-react';
+import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart, Search } from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useTheme } from '../../hooks/useTheme';
 import { useDateSetting, useFiles } from '../../hooks/useLocalStorage';
@@ -19,6 +19,7 @@ import { ExpertsListView } from '../Experts/ExpertsListView';
 import { ExpertEditModal } from '../Experts/ExpertEditModal';
 import { ExpertLimitOverlay } from '../UI/ExpertLimitOverlay';
 import { ToneSelectionOverlay } from '../UI/ToneSelectionOverlay';
+import { SearchAllChatsOverlay } from './SearchAllChatsOverlay';
 import { SETUP_CONFIG } from '../../config/setup';
 import { storage } from '../../utils/storage';
 import { getTonePreference, saveTonePreference } from '../../utils/toneStorage';
@@ -105,7 +106,9 @@ export function Sidebar({
   const [showRestoreSuccess, setShowRestoreSuccess] = useState(false);
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
   const [isIOSBrowser, setIsIOSBrowser] = useState(false);
-  
+  const [showAllChats, setShowAllChats] = useState(false);
+  const [showSearchAllOverlay, setShowSearchAllOverlay] = useState(false);
+
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       const platform = Capacitor.getPlatform();
@@ -448,12 +451,31 @@ export function Sidebar({
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 py-2">{t('noChatsYet')}</p>
               ) : (
                 <div className="space-y-1">
-                  {regularChats.map((chat) => (
-                    <button key={chat.id} onClick={() => onSelectChat(chat.id)} className={`w-full text-left px-2 py-2 sm:py-1 rounded text-xs sm:text-sm truncate transition-colors ${ selectedChatId === chat.id ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800' }`}>
-                      {chatTitles[chat.id] || chat.title}
-                    </button>
-                  ))}
-                </div>
+                  {(showAllChats ? regularChats : regularChats.slice(0, 20)).map((chat) => (
+                    <button key={chat.id} onClick={() => onSelectChat(chat.id)} className={`w-full text-left px-2 py-2 sm:py-1 rounded text-xs sm:text-sm truncate transition-colors ${ selectedChatId === chat.id ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800' }`}>
+                      {chatTitles[chat.id] || chat.title}
+                    </button>
+                  ))}
+
+                  {regularChats.length > 20 && !showAllChats && (
+                    <button
+                      onClick={() => setShowAllChats(true)}
+                      className="w-full text-center px-2 py-2 rounded text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium"
+                    >
+                      {t('show_more') || `Show ${regularChats.length - 20} more...`}
+                    </button>
+                  )}
+
+                  {regularChats.length >= 2 && (
+                    <button
+                      onClick={() => setShowSearchAllOverlay(true)}
+                      className="w-full text-center px-2 py-2 rounded text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium flex items-center justify-center gap-1.5"
+                    >
+                      <Search size={14} />
+                      {t('search_all') || 'Search All'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1123,6 +1145,13 @@ export function Sidebar({
         }}
         showContinueButton={true}
         isFirstTimeSetup={false}
+      />
+
+      <SearchAllChatsOverlay
+        isOpen={showSearchAllOverlay}
+        onClose={() => setShowSearchAllOverlay(false)}
+        chats={chats}
+        onSelectChat={onSelectChat}
       />
         </>
   );

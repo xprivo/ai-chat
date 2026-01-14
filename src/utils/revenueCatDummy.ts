@@ -13,6 +13,10 @@ async function ensureConfigured(): Promise<void> {
   return;
 }
 
+export async function loginUserAnonym(appUserID: string): Promise<boolean> {
+  return false;
+}
+
 export function isConfigured(): boolean {
   return true; // Always return true
 }

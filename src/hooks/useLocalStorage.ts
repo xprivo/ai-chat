@@ -105,7 +105,18 @@ export function useFiles() {
       }
     };
 
+    const handleFilesUpdate = (event: CustomEvent) => {
+      if (event.detail.files) {
+        setFiles(event.detail.files);
+      }
+    };
+
+    window.addEventListener('filesUpdated', handleFilesUpdate as EventListener);
     loadFiles();
+
+    return () => {
+      window.removeEventListener('filesUpdated', handleFilesUpdate as EventListener);
+    };
   }, []);
 
   const saveFile = async (id: string, content: string) => {
