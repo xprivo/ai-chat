@@ -143,14 +143,24 @@ function App() {
       }
     };
 
+    const handleAddNewChat = (event: CustomEvent) => {
+      const { chat } = event.detail;
+      const updatedChats = [chat, ...chats];
+      saveChats(updatedChats);
+      setSelectedChatId(chat.id);
+      setTempChat(null);
+    };
+
     window.addEventListener('chatTitleUpdated', handleChatTitleUpdate as EventListener);
     window.addEventListener('chatTemperatureUpdated', handleChatTemperatureUpdate as EventListener);
     window.addEventListener('chatSystemPromptUpdated', handleChatSystemPromptUpdate as EventListener);
+    window.addEventListener('addNewChat', handleAddNewChat as EventListener);
 
     return () => {
       window.removeEventListener('chatTitleUpdated', handleChatTitleUpdate as EventListener);
       window.removeEventListener('chatTemperatureUpdated', handleChatTemperatureUpdate as EventListener);
       window.removeEventListener('chatSystemPromptUpdated', handleChatSystemPromptUpdate as EventListener);
+      window.removeEventListener('addNewChat', handleAddNewChat as EventListener);
     };
   }, [chats, tempChat, saveChats]);
 
@@ -173,14 +183,20 @@ function App() {
       setShowRemoveChatsModal(true);
     };
 
+    const handleShowProOverlay = () => {
+      setShowProOverlay(true);
+    };
+
     window.addEventListener('showEditWorkspaceModal', handleShowEditWorkspaceModal as EventListener);
     window.addEventListener('showAddChatsModal', handleShowAddChatsModal as EventListener);
     window.addEventListener('showRemoveChatsModal', handleShowRemoveChatsModal as EventListener);
+    window.addEventListener('showProOverlay', handleShowProOverlay);
 
     return () => {
       window.removeEventListener('showEditWorkspaceModal', handleShowEditWorkspaceModal as EventListener);
       window.removeEventListener('showAddChatsModal', handleShowAddChatsModal as EventListener);
       window.removeEventListener('showRemoveChatsModal', handleShowRemoveChatsModal as EventListener);
+      window.removeEventListener('showProOverlay', handleShowProOverlay);
     };
   }, []);
 

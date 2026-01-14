@@ -57,7 +57,7 @@ export function FileManager({ files, images, onMentionFile, onClose }: FileManag
                   {name}
                 </h3>
                 <span className="inline-block text-xs px-2 py-1 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 mt-2">
-                  {type.toUpperCase()}
+                  {type === 'file' ? t('file_solo') : t('image_solo')}
                 </span>
               </div>
             </div>

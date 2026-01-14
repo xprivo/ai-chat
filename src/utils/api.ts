@@ -134,6 +134,32 @@ export async function sendChatMessage(
             }));
             onComplete();
             return;
+          } 
+
+          if (errorData.message === 'show_limit_pro_model_reached') {
+            window.dispatchEvent(new CustomEvent('showErrorOverlay', {
+              detail: {
+                title: t ? t('errorOverlay_proModelLimit_title') : 'PRO model limit reached',
+                text: t ? t('errorOverlay_proModelLimit_text') : 'You have used up all your PRO model requests. Use a model that is not marked with PRO to continue.',
+                showProButton: false,
+                icon: 'warning'
+              }
+            }));
+            onComplete();
+            return;
+          }
+          
+          if (errorData.message === 'show_upgrade_pro') {
+            window.dispatchEvent(new CustomEvent('showErrorOverlay', {
+              detail: {
+                title: t ? t('errorOverlay_proModel_title') : 'This is a PRO model',
+                text: t ? t('errorOverlay_proModel_text') : 'Upgrade to PRO to use this model and unlock higher limits and no ads.',
+                showProButton: false,
+                icon: 'zap'
+              }
+            }));
+            onComplete();
+            return;
           }
 
           if (errorData.message === 'show_limit_reached_pro') {

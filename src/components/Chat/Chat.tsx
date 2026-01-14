@@ -11,9 +11,12 @@ import { useTranslation } from '../../hooks/useTranslation';
 import { SponsoredContent } from './SponsoredContent';
 import { PremiumOverlay } from '../UI/PremiumOverlay';
 import { ErrorOverlay } from '../UI/ErrorOverlay';
+import { SplitChatOverlay } from '../UI/SplitChatOverlay';
 import { CSRFManager } from '../../utils/csrf';
 import { storage } from '../../utils/storage';
 import { setupKeyboardHandler, cleanupKeyboardHandler } from '../../utils/keyboardHandler';
+import { fetchProModels } from '../../utils/proModels';
+import { Briefcase, Sparkles } from 'lucide-react';
  
 interface ChatProps {
   chat: ChatType;
@@ -39,7 +42,7 @@ interface SearchBody {
 
 export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstructions, expertInstructions, toneInstructions, workspaces, experts, onUpdateExperts, onDeleteExpert, onShowProOverlay, onToggleSidebar, isSidebarOpen }: ChatProps) {
   const { t, i18n } = useTranslation();
-  const { aiSettings } = useAISettings();
+  const { aiSettings, saveAISettings } = useAISettings();
   const [isLoading, setIsLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
@@ -86,6 +89,9 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   const [errorOverlayIcon, setErrorOverlayIcon] = useState('warning');
 
   const [hasProKey, setHasProKey] = useState(false);
+
+  const [showSplitOverlay, setShowSplitOverlay] = useState(false);
+  const [splitMessageId, setSplitMessageId] = useState<string | null>(null);
   
   // Default sponsored content fallback
   const defaultSponsoredContent = [];
@@ -346,6 +352,54 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
     checkProKey();
     window.addEventListener('storage', checkProKey);
     return () => window.removeEventListener('storage', checkProKey);
+  }, []);
+
+  useEffect(() => {
+    const loadProModels = async () => {
+      const proModelsData = await fetchProModels();
+
+      if (proModelsData && proModelsData.extra_models) {
+        const extraModels = proModelsData.extra_models;
+        const extraModelNames = Object.keys(extraModels);
+
+        const xprivoEndpoint = aiSettings.endpoints.find(ep => ep.id === 'default' || ep.name === 'xPrivo');
+
+        if (xprivoEndpoint) {
+          const currentXprivoModels = xprivoEndpoint.models.filter(m => m === 'xprivo');
+          const updatedModels = [...currentXprivoModels, ...extraModelNames];
+
+          const modelMetadata: Record<string, any> = {};
+          extraModelNames.forEach(modelName => {
+            modelMetadata[modelName] = extraModels[modelName];
+          });
+
+          const updatedEndpoint = {
+            ...xprivoEndpoint,
+            models: updatedModels,
+            modelMetadata
+          };
+
+          const otherEndpoints = aiSettings.endpoints.filter(ep => ep.id !== xprivoEndpoint.id);
+          const updatedEndpoints = [updatedEndpoint, ...otherEndpoints];
+
+          let selectedModel = aiSettings.selectedModel;
+          if (selectedModel !== 'xprivo' && !extraModelNames.includes(selectedModel)) {
+            selectedModel = 'xprivo';
+          }
+
+          const updatedSettings = {
+            ...aiSettings,
+            endpoints: updatedEndpoints,
+            selectedModel,
+            extraModels
+          };
+
+          saveAISettings(updatedSettings);
+        }
+      }
+    };
+
+    loadProModels();
   }, []);
   
   useEffect(() => {
@@ -1148,16 +1202,26 @@ const handleSafeWebSearch = async (
     setShowSuggestedPremium(false);
     const messageIndex = chat.messages.findIndex(m => m.id === messageId);
     if (messageIndex === -1) return;
-    
+
     const originalMessage = chat.messages[messageIndex];
     const editedMessage: Message = { ...originalMessage, content: newContent.trim(), timestamp: new Date(), searchResults: null };
-    
+
+    // If editing an assistant message, just update it in place without removing subsequent messages
+    if (originalMessage.role === 'assistant') {
+      const updatedMessages = [...chat.messages];
+      updatedMessages[messageIndex] = editedMessage;
+      const updatedChat: ChatType = { ...chat, messages: updatedMessages, updatedAt: new Date() };
+      onUpdateChat(updatedChat);
+      return;
+    }
+
+    // For user messages, slice and regenerate
     const newMessagesArray: Message[] = chat.messages.slice(0, messageIndex);
     newMessagesArray.push(editedMessage);
-    
+
     const updatedChat: ChatType = { ...chat, messages: newMessagesArray, updatedAt: new Date() };
     onUpdateChat(updatedChat);
-    
+
     if (originalMessage.role === 'user') {
       const stored = localStorage.getItem('aiSettings');
       let currentAISettings = aiSettings;
@@ -1348,6 +1412,123 @@ const handleSafeWebSearch = async (
     saveFile(imageKey, image.content);
   };
 
+  const handleSplitMessage = (messageId: string) => {
+    setSplitMessageId(messageId);
+    setShowSplitOverlay(true);
+  };
+
+  const handleConfirmSplit = async (newTitle: string) => {
+    if (!splitMessageId) return;
+
+    const messageIndex = chat.messages.findIndex(m => m.id === splitMessageId);
+    if (messageIndex === -1) return;
+
+    const messagesUpToSplit = chat.messages.slice(0, messageIndex + 1);
+
+    const newChatId = `chat_${Date.now()}`;
+
+    const currentStoredFiles = await storage.files.get();
+    const allFiles = currentStoredFiles ? JSON.parse(currentStoredFiles) : {};
+
+    const filesToCopy: Record<string, string> = {};
+
+    const copiedMessages = messagesUpToSplit.map((message) => {
+      const copiedMessage = { ...message };
+
+      if (message.files && message.files.length > 0) {
+        copiedMessage.files = message.files.map((file) => {
+          const oldFileKey = `${chat.id}_file_${file.name}`;
+          const newFileKey = `${newChatId}_file_${file.name}`;
+          const fileContent = allFiles[oldFileKey] || file.content;
+
+          if (fileContent) {
+            filesToCopy[newFileKey] = fileContent;
+          }
+
+          return {
+            ...file,
+            id: newFileKey
+          };
+        });
+      }
+
+      if (message.images && message.images.length > 0) {
+        copiedMessage.images = message.images.map((image) => {
+          const oldImageKey = `${chat.id}_image_${image.name}`;
+          const newImageKey = `${newChatId}_image_${image.name}`;
+          const imageContent = allFiles[oldImageKey] || image.content;
+
+          if (imageContent) {
+            filesToCopy[newImageKey] = imageContent;
+          }
+
+          return {
+            ...image,
+            id: newImageKey
+          };
+        });
+      }
+
+      const mentions = message.content.match(/@(\w+)/g);
+      if (mentions) {
+        mentions.forEach(mention => {
+          const itemName = mention.slice(1);
+
+          const oldFileKey = `${chat.id}_file_${itemName}`;
+          if (allFiles[oldFileKey] && !filesToCopy[`${newChatId}_file_${itemName}`]) {
+            filesToCopy[`${newChatId}_file_${itemName}`] = allFiles[oldFileKey];
+          }
+
+          const oldImageKey = `${chat.id}_image_${itemName}`;
+          if (allFiles[oldImageKey] && !filesToCopy[`${newChatId}_image_${itemName}`]) {
+            filesToCopy[`${newChatId}_image_${itemName}`] = allFiles[oldImageKey];
+          }
+        });
+      }
+
+      return copiedMessage;
+    });
+
+    const allOldFileKeys = Object.keys(allFiles).filter(key => key.startsWith(`${chat.id}_`));
+    allOldFileKeys.forEach(oldKey => {
+      const suffix = oldKey.substring(chat.id.length + 1);
+      const newKey = `${newChatId}_${suffix}`;
+      if (!filesToCopy[newKey] && allFiles[oldKey]) {
+        filesToCopy[newKey] = allFiles[oldKey];
+      }
+    });
+
+    if (Object.keys(filesToCopy).length > 0) {
+      const updatedFiles = { ...allFiles, ...filesToCopy };
+      try {
+        await storage.files.set(JSON.stringify(updatedFiles));
+
+        window.dispatchEvent(new CustomEvent('filesUpdated', {
+          detail: { files: updatedFiles }
+        }));
+      } catch (error) {
+        console.error('Error copying files:', error);
+      }
+    }
+
+    const newChat: ChatType = {
+      id: newChatId,
+      title: newTitle,
+      messages: copiedMessages,
+      systemPrompt: chat.systemPrompt,
+      temperature: chat.temperature,
+      workspaceId: chat.workspaceId,
+      expertId: chat.expertId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    window.dispatchEvent(new CustomEvent('addNewChat', {
+      detail: { chat: newChat }
+    }));
+
+    setSplitMessageId(null);
+  };
 
   const displayMessages = [...chat.messages];
   if (streamingMessage && streamingMessageId && !chat.messages.find(m => m.id === streamingMessageId)) {
@@ -1395,6 +1576,36 @@ const handleSafeWebSearch = async (
           <div className="mx-auto max-w-[1200px]">
             {chat.messages.length === 0 && (
               <div className="p-4 text-center max-w-4xl mx-auto mb-8">
+                {chat.workspaceId && (() => {
+                  const workspace = workspaces.find(w => w.id === chat.workspaceId);
+                  if (workspace) {
+                    return (
+                      <div className="flex items-center justify-center gap-2 mb-4 mx-auto" style={{ maxWidth: '500px' }}>
+                        <Briefcase size={18} className="text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                          {workspace.name}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {chat.expertId && (() => {
+                  const expert = experts.find(e => e.id === chat.expertId);
+                  if (expert) {
+                    return (
+                      <div className="flex items-center justify-center gap-2 mb-4 mx-auto" style={{ maxWidth: '500px' }}>
+                        <Sparkles size={18} className="text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                          Expert: {expert.name}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {customIcon && (
                   <img
                     src={customIcon}
@@ -1463,8 +1674,10 @@ const handleSafeWebSearch = async (
                 }}
                 onEditMessage={handleEditMessage}
                 onRetryMessage={handleRetryMessage}
+                onSplitMessage={handleSplitMessage}
                 isLoading={isLoading}
                 streamingMessage={streamingMessage}
+                streamingMessageId={streamingMessageId}
                 searchKeywords={searchKeywords}
                 searchResults={searchResults}
                 isSearching={isSearching}
@@ -1533,6 +1746,16 @@ const handleSafeWebSearch = async (
         onClose={() => setShowErrorOverlay(false)}
         onShowPro={onShowProOverlay}
         icon={errorOverlayIcon}
+      />
+
+      <SplitChatOverlay
+        isOpen={showSplitOverlay}
+        currentTitle={currentChatTitle}
+        onClose={() => {
+          setShowSplitOverlay(false);
+          setSplitMessageId(null);
+        }}
+        onConfirm={handleConfirmSplit}
       />
     </div>
   );

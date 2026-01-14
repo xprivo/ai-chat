@@ -19,26 +19,30 @@ interface MessageListProps {
   onShowPremiumOverlay: () => void;
   onEditMessage: (messageId: string, newContent: string) => void;
   onRetryMessage: (messageId: string) => void;
+  onSplitMessage?: (messageId: string) => void;
   isLoading: boolean;
   streamingMessage: string;
+  streamingMessageId?: string | null;
   searchKeywords: string;
   searchResults: SearchResults | null;
   isSearching: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }
 
-export function MessageList({ 
-  messages, 
-  availableImages, 
+export function MessageList({
+  messages,
+  availableImages,
   streamingSponsoredContentTitle = '',
   streamingSponsoredContent,
   showSuggestedPremium,
   onDismissSuggestedPremium,
   onShowPremiumOverlay,
-  onEditMessage, 
-  onRetryMessage, 
-  isLoading, 
+  onEditMessage,
+  onRetryMessage,
+  onSplitMessage,
+  isLoading,
   streamingMessage,
+  streamingMessageId,
   searchKeywords,
   searchResults,
   isSearching,
@@ -55,6 +59,8 @@ export function MessageList({
             availableImages={availableImages}
             onEdit={onEditMessage}
             onRetry={onRetryMessage}
+            onSplit={onSplitMessage}
+            isStreaming={!!streamingMessageId && message.id === streamingMessageId}
           />
           {/* Show search results for this specific message */}
           {message.searchResults && message.role === 'user' && (
