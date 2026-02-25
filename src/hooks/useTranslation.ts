@@ -18,6 +18,13 @@ export function useTranslation() {
 
   useEffect(() => {
     const determineLanguage = async (): Promise<Language> => {
+      const pathLang = window.location.pathname.split('/')[1];
+      const isSearchRoute = /\/search\/?$/.test(window.location.pathname);
+
+      if (isSearchRoute && pathLang && isSupported(pathLang)) {
+        return pathLang;
+      }
+
       try {
         const stored = await storage.settings.get('language');
         if (stored && isSupported(stored)) {
@@ -27,7 +34,6 @@ export function useTranslation() {
         console.warn('Could not get lang from storage:', e);
       }
 
-      const pathLang = window.location.pathname.split('/')[1];
       if (pathLang && isSupported(pathLang)) {
         return pathLang;
       }
