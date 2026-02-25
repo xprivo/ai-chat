@@ -6,6 +6,7 @@ import { extractTextFromFile, getFileTypeFromName } from '../../utils/fileProces
 import { FileReference } from '../../types';
 import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
+import { getPendingDroppedFile } from '../Chat/ChatInput';
 
 interface FileProcessorProps {
   onFileProcessed: (file: FileReference) => void;
@@ -28,6 +29,34 @@ export function FileProcessor({ onFileProcessed, onClose, existingFileNames, cha
 
   useEffect(() => {
     setIsMobile(Capacitor.isNativePlatform());
+  }, []);
+
+  useEffect(() => {
+    const processDroppedFile = (file: File) => {
+      setSelectedFile(file);
+      const baseName = file.name.split('.')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+      setFileName(baseName);
+      setError('');
+      setSuccess(false);
+      setProcessingStatus('');
+    };
+
+    const pendingFile = getPendingDroppedFile();
+    if (pendingFile) {
+      processDroppedFile(pendingFile);
+    }
+
+    const handleFileDropped = (event: CustomEvent) => {
+      const file = event.detail as File;
+      if (file) {
+        processDroppedFile(file);
+      }
+    };
+
+    window.addEventListener('fileDropped', handleFileDropped as EventListener);
+    return () => {
+      window.removeEventListener('fileDropped', handleFileDropped as EventListener);
+    };
   }, []);
   
   const handleDragOver = (e: React.DragEvent) => {

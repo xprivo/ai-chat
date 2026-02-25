@@ -42,7 +42,6 @@ async function extractPDFText(file: File): Promise<string> {
   }
 }
 
-// Excel parsing function
 async function extractExcelText(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -57,7 +56,6 @@ async function extractExcelText(file: File): Promise<string> {
 
       worksheet.eachRow((row, rowNumber) => {
         const rowValues = row.values as any[];
-        // Skip the first element (it's undefined in exceljs)
         const cells = rowValues.slice(1).map(cell => {
           if (cell === null || cell === undefined) return '';
           if (typeof cell === 'object' && 'text' in cell) return cell.text;
@@ -82,7 +80,6 @@ async function extractExcelText(file: File): Promise<string> {
   }
 }
 
-// Word document parsing function using mammoth
 async function extractWordText(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -110,7 +107,6 @@ export async function extractTextFromFile(file: File): Promise<string> {
   const fileName = file.name.toLowerCase();
 
   try {
-    // Text files - extract real content
     if (fileType.includes('text') || fileName.endsWith('.txt')) {
       const content = await file.text();
       if (!content || content.trim().length < 1) {
@@ -119,7 +115,6 @@ export async function extractTextFromFile(file: File): Promise<string> {
       return content;
     }
 
-    // CSV files - extract real content
     if (fileType.includes('csv') || fileName.endsWith('.csv')) {
       const content = await file.text();
       if (!content || content.trim().length < 1) {
@@ -128,22 +123,18 @@ export async function extractTextFromFile(file: File): Promise<string> {
       return content;
     }
 
-    // PDF files - use PDF.js for proper extraction
     if (fileType.includes('pdf') || fileName.endsWith('.pdf')) {
       return await extractPDFText(file);
     }
 
-    // Excel files - use xlsx library
     if (fileType.includes('sheet') || fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
       return await extractExcelText(file);
     }
 
-    // Word documents - use mammoth library
     if (fileType.includes('document') || fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
       return await extractWordText(file);
     }
 
-    // For any other file type, try to read as text
     const content = await file.text();
     if (!content || content.trim().length < 1) {
       throw new Error('File appears to be empty or binary');
@@ -151,12 +142,10 @@ export async function extractTextFromFile(file: File): Promise<string> {
     return content;
 
   } catch (error) {
-    // If it's already our custom error, re-throw it
     if (error instanceof Error) {
       throw error;
     }
-    
-    // For any other error, show generic message
+
     throw new Error('Not possible to extract content');
   }
 }

@@ -8,6 +8,7 @@ import { Input } from '../UI/Input';
 import { SETUP_CONFIG } from '../../config/setup';
 import { storage } from '../../utils/storage';
 import { Capacitor } from '@capacitor/core';
+import { getPendingDroppedFile } from '../Chat/ChatInput';
 
 interface PhotoUploadProps {
     onImageProcessed: (image: ImageReference) => void;
@@ -246,6 +247,36 @@ export function PhotoUpload({ onImageProcessed, onClose, existingImageNames, cha
         return () => {
             window.removeEventListener('accountStatusChanged', handleAccountStatusChange);
             window.removeEventListener('storage', handleAccountStatusChange);
+        };
+    }, []);
+
+    useEffect(() => {
+        const processDroppedFile = (file: File) => {
+            if (file.type.startsWith('image/')) {
+                setSelectedFile(file);
+                const baseName = file.name.split('.')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+                setImageName(baseName);
+                setError('');
+                setSuccess(false);
+                setProcessingStatus('');
+            }
+        };
+
+        const pendingFile = getPendingDroppedFile();
+        if (pendingFile) {
+            processDroppedFile(pendingFile);
+        }
+
+        const handleFileDropped = (event: CustomEvent) => {
+            const file = event.detail as File;
+            if (file) {
+                processDroppedFile(file);
+            }
+        };
+
+        window.addEventListener('fileDropped', handleFileDropped as EventListener);
+        return () => {
+            window.removeEventListener('fileDropped', handleFileDropped as EventListener);
         };
     }, []);
 
