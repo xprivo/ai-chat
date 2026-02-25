@@ -77,15 +77,24 @@ export async function migrateToCapacitorStorage(): Promise<void> {
   }
 
   try {
-    // Get all localStorage keys
-    const keys = Object.keys(localStorage);
+    const { value: migrated } = await Preferences.get({ key: '__storage_migrated_v1' });
+    if (migrated === 'true') {
+      return;
+    }
 
+    const keys = Object.keys(localStorage);
     for (const key of keys) {
       const value = localStorage.getItem(key);
       if (value) {
         await Preferences.set({ key, value });
       }
     }
+
+    // Clear auth-sensitive keys from localStorage so they are only in Capacitor Preferences
+    localStorage.removeItem('pro_key');
+    localStorage.removeItem('pro_subscription_type');
+
+    await Preferences.set({ key: '__storage_migrated_v1', value: 'true' });
   } catch (error) {
     console.error('Migration failed:', error);
   }

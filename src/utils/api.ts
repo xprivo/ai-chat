@@ -15,6 +15,7 @@ interface ChatAPIRequest {
   frequency_penalty?: number;
   ads_token?: string;
   chat_language?: string;
+  use_web?: 'on' | 'off';
 }
  
 interface SponsoredAd {
@@ -25,6 +26,7 @@ interface SponsoredAd {
   sponsored_notice: 'sponsored' | 'partner' | 'offer' | 'promoted';
   save_text: string;
   url: string;
+  visible_url: string;
   image: string;
   svg: string;
   advertiser_name: string;
@@ -41,7 +43,9 @@ export async function sendChatMessage(
   onError: (error: string) => void,
   onComplete: () => void,
   signal?: AbortSignal,
-  t?: TranslationFunction
+  t?: TranslationFunction,
+  onSearchingWeb?: () => void,
+  onSearchResults?: (results: any[]) => void
 ): Promise<void> {
   try {
     const getAIAuthorizationHeader = (authorization: string, endpointUrl: string): string => {
@@ -70,35 +74,38 @@ export async function sendChatMessage(
         'Authorization': getAIAuthorizationHeader(request.authorization, request.endpoint),
         ...csrfHeaders,
         ...(request.ads_token && { 'X-Ads-Token': request.ads_token }),
-        ...(request.chat_language && { 'X-Lang-Chat': request.chat_language })
+        ...(request.chat_language && { 'X-Lang-Chat': request.chat_language }),
+        ...(request.use_web !== undefined && { 'X-Use-Web': request.use_web }),
+        ...(SETUP_CONFIG.apiRequestConfig.version !== null &&
+            { 'X-Api-Version': String(SETUP_CONFIG.apiRequestConfig.version) })
       },
       body: JSON.stringify({
         messages: request.messages,
         model: request.model,
-        ...(SETUP_CONFIG.apiRequestConfig.add_temperature && 
-        request.temperature !== undefined && 
+        ...(SETUP_CONFIG.apiRequestConfig.add_temperature &&
+        request.temperature !== undefined &&
         { temperature: request.temperature }),
 
-        ...(SETUP_CONFIG.apiRequestConfig.add_request_type && 
-        request.request_type && 
+        ...(SETUP_CONFIG.apiRequestConfig.add_request_type &&
+        request.request_type &&
         { request_type: request.request_type }),
-        ...(SETUP_CONFIG.apiRequestConfig.max_tokens !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.max_tokens !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.max_tokens !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.max_tokens !== null &&
             { max_tokens: SETUP_CONFIG.apiRequestConfig.max_tokens }),
-        ...(SETUP_CONFIG.apiRequestConfig.max_completion_tokens !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.max_completion_tokens !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.max_completion_tokens !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.max_completion_tokens !== null &&
             { max_completion_tokens: SETUP_CONFIG.apiRequestConfig.max_completion_tokens }),
-        ...(SETUP_CONFIG.apiRequestConfig.top_p !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.top_p !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.top_p !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.top_p !== null &&
             { top_p: SETUP_CONFIG.apiRequestConfig.top_p }),
-        ...(SETUP_CONFIG.apiRequestConfig.presence_penalty !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.presence_penalty !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.presence_penalty !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.presence_penalty !== null &&
             { presence_penalty: SETUP_CONFIG.apiRequestConfig.presence_penalty }),
-        ...(SETUP_CONFIG.apiRequestConfig.frequency_penalty !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.frequency_penalty !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.frequency_penalty !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.frequency_penalty !== null &&
             { frequency_penalty: SETUP_CONFIG.apiRequestConfig.frequency_penalty }),
-        ...(SETUP_CONFIG.apiRequestConfig.stream !== undefined && 
-            SETUP_CONFIG.apiRequestConfig.stream !== null && 
+        ...(SETUP_CONFIG.apiRequestConfig.stream !== undefined &&
+            SETUP_CONFIG.apiRequestConfig.stream !== null &&
             { stream: SETUP_CONFIG.apiRequestConfig.stream })
       }),
       signal: signal 
@@ -267,18 +274,52 @@ export async function sendChatMessage(
           }
           try {
             const parsed = JSON.parse(data);
+
+            // Handle SSE-delivered error messages (sent when headers already sent)
+            if (parsed.error && parsed.error.message) {
+              const errorMsg = parsed.error.message;
+              const sseErrorCodes: Record<string, () => void> = {
+                'wrong_key': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_wrongKey_title') : 'Invalid Key', text: t ? t('errorOverlay_wrongKey_text') : 'The provided key is invalid.', showProButton: false, icon: 'warning' } })),
+                'show_not_pro_anymore': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_proExpired_title') : 'Pro Expired', text: t ? t('errorOverlay_proExpired_text') : 'Your Pro subscription has expired.', showProButton: false, icon: 'warning' } })),
+                'show_limit_pro_model_reached': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_proModelLimit_title') : 'PRO model limit reached', text: t ? t('errorOverlay_proModelLimit_text') : 'You have used up all your PRO model requests.', showProButton: false, icon: 'warning' } })),
+                'show_upgrade_pro': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_proModel_title') : 'This is a PRO model', text: t ? t('errorOverlay_proModel_text') : 'Upgrade to PRO to use this model.', showProButton: false, icon: 'zap' } })),
+                'show_limit_reached_pro': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_proLimitReached_title') : 'Limit Reached', text: t ? t('errorOverlay_proLimitReached_text') : 'You have reached your Pro usage limit.', showProButton: false, icon: 'warning' } })),
+                'limit_max_images': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_tooManyImages_title') : 'Too Many Images', text: t ? t('errorOverlay_tooManyImages_text') : 'You have exceeded the maximum number of images.', showProButton: false, icon: 'warning' } })),
+                'limit_max_imagesize': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_imagesTooLarge_title') : 'Images Too Large', text: t ? t('errorOverlay_imagesTooLarge_text') : 'The images are too large.', showProButton: false, icon: 'warning' } })),
+                'limit_max_total_imagesize': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_imagesTooLarge_title') : 'Images Too Large', text: t ? t('errorOverlay_imagesTooLarge_text') : 'The images are too large.', showProButton: false, icon: 'warning' } })),
+                'show_daily_free_limit_reached': () => window.dispatchEvent(new CustomEvent('showErrorOverlay', { detail: { title: t ? t('errorOverlay_freeLimitReached_title') : 'Free Limit Reached', text: t ? t('errorOverlay_freeLimitReached_text') : 'You have reached your daily free usage limit.', showProButton: true, icon: 'warning' } })),
+                'show_premium_suggestion': () => window.dispatchEvent(new CustomEvent('showPremiumOverlay', { detail: { type: 'premium_suggestion' } })),
+                'show_limit_reached': () => window.dispatchEvent(new CustomEvent('showPremiumOverlay', { detail: { type: 'limit_reached' } })),
+              };
+              if (sseErrorCodes[errorMsg]) {
+                sseErrorCodes[errorMsg]();
+              }
+              onComplete();
+              return;
+            }
+
+            if (parsed.searching_web === true) {
+              onSearchingWeb?.();
+              continue;
+            }
+
+            if (parsed.new_results !== undefined) {
+              onSearchResults?.(parsed.new_results);
+              continue;
+            }
+
             if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
               onMessage(parsed.choices[0].delta.content);
             }
-            // Handle sponsored content
+
             if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.sponsored_content) {
               onSponsoredContentTitle(parsed?.choices?.[0]?.delta?.sponsored_content_title ?? '');
               onSponsoredContent(parsed?.choices?.[0]?.delta?.sponsored_content ?? []);
               onAdstoken(parsed?.choices?.[0]?.delta?.ads_token ?? '');
             }
-            // Handle suggested premium content
+
             if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.suggested_premium_content) {
-              window.dispatchEvent(new CustomEvent('showSuggestedPremium', { 
+              window.dispatchEvent(new CustomEvent('showSuggestedPremium', {
                 detail: { content: parsed.choices[0].delta.suggested_premium_content }
               }));
             }

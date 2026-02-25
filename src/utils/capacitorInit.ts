@@ -12,7 +12,6 @@ export async function initializeCapacitor(): Promise<void> {
       // Migrate existing localStorage data to Capacitor Preferences
       await migrateToCapacitorStorage();
 
-      // Configure RevenueCat for iOS in-app purchases
       if (Capacitor.getPlatform() === 'ios') {
         const REVENUECAT_IOS_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY;
         if (REVENUECAT_IOS_API_KEY) {

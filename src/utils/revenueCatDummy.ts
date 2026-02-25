@@ -13,10 +13,6 @@ async function ensureConfigured(): Promise<void> {
   return;
 }
 
-export async function loginUserAnonym(appUserID: string): Promise<boolean> {
-  return false;
-}
-
 export function isConfigured(): boolean {
   return true; // Always return true
 }
@@ -29,6 +25,10 @@ export async function getProProductPrice(): Promise<string | null> {
   return '$9.99'; // Mock price - change to whatever you want
 }
 
+export async function loginUserAnonym(appUserID: string): Promise<boolean> {
+  return false;
+}
+
 export async function purchaseProSubscription(): Promise<{ success: boolean; customerInfo?: any; error?: any }> {
   // Mock successful purchase
   return { 
@@ -36,6 +36,7 @@ export async function purchaseProSubscription(): Promise<{ success: boolean; cus
     customerInfo: { mockData: true }
   };
 }
+
 
 export async function restorePurchases(): Promise<{ success: boolean; customerInfo?: any; error?: any }> {
   // Mock successful restore
