@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { X, Sparkles, Shield, Search, Image, Smartphone, Zap, Crown, FileText, ExternalLink } from 'lucide-react';
+import { X, Sparkles, Shield, Search, Image, Smartphone, Zap, Crown, FileText, ExternalLink, BadgeCheck } from 'lucide-react';
 import { Portal } from './Portal';
 import { useTranslation } from '../../hooks/useTranslation';
 
@@ -55,9 +55,9 @@ export function PremiumOverlay({ isOpen, type, onClose }: PremiumOverlayProps) {
 
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 z-20 p-2 text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white transition-colors bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 rounded-full backdrop-blur-md"
+            className="absolute top-4 right-4 z-20 flex-shrink-0 w-9 h-9 min-w-[2.25rem] min-h-[2.25rem] p-0 aspect-square flex items-center justify-center text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white transition-colors bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 rounded-full backdrop-blur-md"
           >
-            <X size={20} />
+            <X size={20} className="flex-shrink-0" />
           </button>
 
           <div className="relative flex-shrink-0 bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 dark:from-gray-900 dark:via-slate-900 dark:to-black p-8 text-gray-900 dark:text-white border-b border-gray-200/50 dark:border-white/5">
@@ -66,7 +66,7 @@ export function PremiumOverlay({ isOpen, type, onClose }: PremiumOverlayProps) {
               <div className="flex items-center gap-4 mb-1">
                 <div className="flex-shrink-0 w-14 h-14 bg-gray-900 dark:bg-black rounded-2xl flex items-center justify-center shadow-lg border border-gray-800 dark:border-white/10 ring-1 ring-white/5">
                   {isPremiumSuggestion ? (
-                    <Sparkles className="w-7 h-7 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" />
+                    <BadgeCheck className="w-7 h-7 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" />
                   ) : (
                     <Crown className="w-7 h-7 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" />
                   )}

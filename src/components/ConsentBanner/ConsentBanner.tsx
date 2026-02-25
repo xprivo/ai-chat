@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
-import { Lock, Heart, Cookie, CloudOff, ShieldCheck } from 'lucide-react';
+import { Lock, Heart, Cookie, CloudOff, ShieldCheck, Info } from 'lucide-react';
 import { SETUP_CONFIG } from '../../config/setup';
 import { storage } from '../../utils/storage';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -16,7 +16,7 @@ export function ConsentBanner() {
   const [showExpertSuggestion, setShowExpertSuggestion] = useState(false);
   const [showToneSelection, setShowToneSelection] = useState(false);
 
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(false); 
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -133,7 +133,28 @@ return (
     
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
           <p className="text-md font-light text-gray-600 dark:text-white/80 text-center mb-6 max-w-xl mx-auto">
-            {t('welcome_subtitle', { appName: SETUP_CONFIG.appName })}
+            {/*{t('welcome_subtitle', { appName: SETUP_CONFIG.appName })}*/}
+           {t('intro_privacy_title', { appName: SETUP_CONFIG.appName })}
+             {
+                !isMobile && SETUP_CONFIG.show_made_europe && (
+                  <span className="flex items-center justify-center gap-1.5 mt-2">
+                    {t('intro_made_eu')}
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      shapeRendering="geometricPrecision" 
+                      textRendering="geometricPrecision" 
+                      imageRendering="optimizeQuality" 
+                      fillRule="evenodd" 
+                      clipRule="evenodd" 
+                      viewBox="0 0 512 356.18"
+                      className="w-6 h-auto rounded-sm shadow-sm"
+                    >
+                      <path fill="#039" fillRule="nonzero" d="M28.137 0H483.86C499.337 0 512 12.663 512 28.14v299.9c0 15.477-12.663 28.14-28.14 28.14H28.137C12.663 356.18 0 343.517 0 328.04V28.14C0 12.663 12.663 0 28.137 0z"/>
+                      <path fill="#FC0" d="M237.179 53.246h14.378L256 39.572l4.443 13.674h14.378l-11.633 8.451 4.444 13.673L256 66.919l-11.632 8.451 4.444-13.673-11.633-8.451zm0 237.458h14.378L256 277.03l4.443 13.674h14.378l-11.633 8.451 4.444 13.673L256 304.377l-11.632 8.451 4.444-13.673-11.633-8.451zM118.45 171.975h14.378l4.443-13.674 4.443 13.674h14.378l-11.633 8.451 4.443 13.673-11.631-8.451-11.632 8.451 4.444-13.673-11.633-8.451zm59.363-102.796h14.377l4.443-13.674 4.443 13.674h14.378l-11.632 8.451 4.443 13.674-11.632-8.451-11.632 8.451 4.443-13.674-11.631-8.451zm-43.429 43.429h14.378l4.442-13.673 4.444 13.673h14.377l-11.632 8.451 4.443 13.674-11.632-8.451-11.631 8.451 4.443-13.674-11.632-8.451zm-.032 118.737h14.377l4.443-13.674 4.443 13.674h14.377l-11.631 8.451 4.443 13.674-11.632-8.451-11.632 8.451 4.443-13.674-11.631-8.451zm43.471 43.46h14.378l4.443-13.674 4.443 13.674h14.378l-11.632 8.451 4.443 13.674-11.632-8.451-11.631 8.451 4.443-13.674-11.633-8.451zm178.085-102.83h14.378l4.443-13.674 4.443 13.674h14.378l-11.633 8.451 4.444 13.673-11.632-8.451-11.631 8.451 4.443-13.673-11.633-8.451zM296.546 69.179h14.378l4.443-13.674 4.443 13.674h14.377l-11.631 8.451 4.443 13.674-11.632-8.451-11.632 8.451 4.443-13.674-11.632-8.451zm43.429 43.429h14.377l4.444-13.673 4.442 13.673h14.378l-11.632 8.451 4.443 13.674-11.631-8.451-11.632 8.451 4.443-13.674-11.632-8.451zm.033 118.737h14.377l4.443-13.674 4.443 13.674h14.377l-11.631 8.451 4.443 13.674-11.632-8.451-11.632 8.451 4.443-13.674-11.631-8.451zm-43.473 43.46h14.378l4.443-13.674 4.443 13.674h14.378l-11.633 8.451 4.443 13.674-11.631-8.451-11.632 8.451 4.443-13.674-11.632-8.451z"/>
+                    </svg>
+                  </span>
+                )
+              }
           </p>
     
           <div className="flex flex-wrap justify-center gap-4 mb-6">
@@ -150,27 +171,34 @@ return (
               <p className="text-gray-700 dark:text-gray-200 text-sm leading-relaxed">{t('welcome_feature3_description')}</p>
             </div>
           </div>
-    
-          <p className="text-gray-600 dark:text-gray-300 text-sm text-center leading-relaxed">
-            {
-              SETUP_CONFIG.acceptConsentBanner
-                ? t('welcome_consent_prefix')
-                : t('welcome_consent_find_prefix')
+
+           {
+              !isMobile && (
+                <p className="text-gray-600 dark:text-gray-300 text-sm text-center leading-relaxed mb-2">
+                  <a
+                    href={SETUP_CONFIG.aboutUrl}
+                    onClick={(e) => handleLinkClick(e, SETUP_CONFIG.aboutUrl)}
+                    className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                  >
+                    {t('intro_about', { appName: SETUP_CONFIG.appName })}
+                  </a>
+                </p>
+              )
             }
-            <a
-              href={SETUP_CONFIG.privacyPolicyUrl}
-              onClick={(e) => handleLinkClick(e, SETUP_CONFIG.privacyPolicyUrl)}
-              className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline ml-1"
-            >
-              {t('common_privacyPolicy')}
-            </a>
-            {' '}{t('common_and')}{' '}
+          <p className="text-gray-600 dark:text-gray-300 text-xs text-center leading-relaxed">
             <a
               href={SETUP_CONFIG.termsOfServiceUrl}
               onClick={(e) => handleLinkClick(e, SETUP_CONFIG.termsOfServiceUrl)}
               className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline"
             >
               {t('common_termsOfService')}
+            </a> |
+            <a
+              href={SETUP_CONFIG.privacyPolicyUrl}
+              onClick={(e) => handleLinkClick(e, SETUP_CONFIG.privacyPolicyUrl)}
+              className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 underline ml-1"
+            >
+              {t('common_privacyPolicy')}
             </a>
           </p>
     
@@ -184,16 +212,27 @@ return (
         </div>
     
         <div className="flex-shrink-0 p-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-t border-gray-200/50 dark:border-gray-700/50">
-          <button
-            onClick={handleConsent}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors duration-200 text-base focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
-          >
-            {
-              SETUP_CONFIG.acceptConsentBanner
-                ? t('welcome_acceptAndContinueButton')
-                : t('welcome_consent_continue_button')
-            }
-          </button>
+         {
+          isMobile ? (
+            <button
+              onClick={handleConsent}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors duration-200 text-base focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+            >
+              {t('welcome_consent_continue_button')}
+            </button>
+          ) : (
+            <button
+              onClick={handleConsent}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors duration-200 text-base focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-white dark:focus:ring-offset-gray-800"
+            >
+              { 
+                SETUP_CONFIG.acceptConsentBanner
+                  ? t('welcome_acceptAndContinueButton')
+                  : t('welcome_consent_continue_button')
+              }
+            </button>
+          )
+        }
         </div>
       </div>
     </div>

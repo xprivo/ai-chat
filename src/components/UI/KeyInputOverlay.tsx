@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';;
+import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 
 import { X, Key, Upload, Loader2, CheckCircle, User } from 'lucide-react';
 import { Portal } from './Portal';
@@ -20,14 +21,23 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
 
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      const platform = Capacitor.getPlatform();
-      if (platform === 'ios') {
-        setIsMobile(true);
-      }
-    }
-  }, []);
-  
+    if (Capacitor.isNativePlatform()) {
+      const platform = Capacitor.getPlatform();
+      if (platform === 'ios') {
+        setIsMobile(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowSuccess(false);
+      setKeyInput('');
+      setError('');
+      setIsValidating(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,14 +75,16 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
 
       if (data.success) {
         setShowSuccess(true);
-        setTimeout(() => {
+        setTimeout(async () => {
+          await capacitorStorage.setItem('pro_key', keyInput.trim());
+          await capacitorStorage.setItem('accountStatus', 'pro');
           localStorage.setItem('pro_key', keyInput.trim());
           localStorage.setItem('accountStatus', 'pro');
-          window.dispatchEvent(new CustomEvent('accountStatusChanged', { 
+          window.dispatchEvent(new CustomEvent('accountStatusChanged', {
             detail: { isSignedUp: true }
           }));
           window.dispatchEvent(new Event('storage'));
-          
+
           onSuccess(keyInput.trim());
         }, 1500);
       } else {
@@ -101,8 +113,8 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
           paddingBottom: 'max(1rem, env(safe-area-inset-bottom))'
         }}>
           <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/50 to-black/60 backdrop-blur-sm"></div>
-          
-          <div 
+
+          <div
             className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-[1000px] max-w-full p-8 border border-gray-200 dark:border-gray-700"
             onClick={(e) => e.stopPropagation()}
           >
@@ -131,7 +143,7 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
       }}>
         <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/50 to-black/60 backdrop-blur-sm" onClick={handleClose}></div>
 
-        <div 
+        <div
           className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-[1000px] max-w-full border border-gray-200 dark:border-gray-700"
           onClick={(e) => e.stopPropagation()}
         >
@@ -195,7 +207,7 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
                 >
                   <Upload className="w-4 h-4" />
                   <span>{!isMobile ? (  <> {t('pro_input_uploadButton')}  </> ) : ( <>{t('pro_input_uploadButton_mobile')}</>)}</span>
-                  
+
                 </label>
               </div>
 

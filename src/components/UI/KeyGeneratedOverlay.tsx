@@ -10,9 +10,10 @@ interface KeyGeneratedOverlayProps {
   generatedKey: string;
   skipPayment?: boolean;
   isLoading?: boolean;
+  disableBackdropClose?: boolean;
 }
  
-export function KeyGeneratedOverlay({ isOpen, onClose, generatedKey, skipPayment = false, isLoading = false }: KeyGeneratedOverlayProps) {
+export function KeyGeneratedOverlay({ isOpen, onClose, generatedKey, skipPayment = false, isLoading = false, disableBackdropClose = false }: KeyGeneratedOverlayProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -61,7 +62,7 @@ export function KeyGeneratedOverlay({ isOpen, onClose, generatedKey, skipPayment
       }}>
         <div
           className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/50 to-black/60 backdrop-blur-sm"
-          onClick={isLoading ? undefined : () => onClose(generatedKey)}
+          onClick={(isLoading || disableBackdropClose) ? undefined : () => onClose(generatedKey)}
         ></div>
         
         <div 

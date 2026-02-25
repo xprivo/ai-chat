@@ -11,6 +11,7 @@ import { AccountCreationOverlay } from './AccountCreationOverlay';
 import { getProProductPrice, purchaseProSubscription, getAppUserID, checkProSubscriptionStatus, loginUserAnonym } from '../../utils/revenueCatDummy';
 import { fetchQuotaInfo, QuotaInfo } from '../../utils/quotaApi';
 import { SETUP_CONFIG } from '../../config/setup';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 
 interface ProOverlayProps {
   isOpen: boolean;
@@ -32,10 +33,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   const [isLoadingKey, setIsLoadingKey] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [subscriberId, setSubscriberId] = useState<string | null>(null);
-  const [isProUser, setIsProUser] = useState(() => {
-    // Will be loaded from storage
-    return false;
-  });
+  const [isProUser, setIsProUser] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
   const [price, setPrice] = useState<string | null>(null);
@@ -124,7 +122,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
   React.useEffect(() => {
     const loadProStatus = async () => {
-      const proKey = localStorage.getItem('pro_key');
+      const proKey = await capacitorStorage.getItem('pro_key');
       setIsProUser(!!proKey);
     };
 
@@ -143,9 +141,18 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   }, []);
 
   React.useEffect(() => {
+    if (isOpen) {
+      (async () => {
+        const proKey = await capacitorStorage.getItem('pro_key');
+        setIsProUser(!!proKey);
+      })();
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
     const loadQuotaInfo = async () => {
       if (isOpen && isProUser) {
-        const proKey = localStorage.getItem('pro_key');
+        const proKey = await capacitorStorage.getItem('pro_key');
         if (proKey) {
           setIsLoadingQuota(true);
           const quota = await fetchQuotaInfo(proKey);
@@ -167,21 +174,27 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
     }
   };
     
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await capacitorStorage.removeItem('pro_key');
+    await capacitorStorage.removeItem('pro_subscription_type');
     localStorage.removeItem('pro_key');
+    localStorage.removeItem('pro_subscription_type');
+    document.cookie = 'pro_key=; path=/; max-age=0';
 
+    await capacitorStorage.setItem('accountStatus', 'free');
     localStorage.setItem('accountStatus', 'free');
-    window.dispatchEvent(new CustomEvent('accountStatusChanged', { 
+    window.dispatchEvent(new CustomEvent('accountStatusChanged', {
       detail: { isSignedUp: false }
     }));
     window.dispatchEvent(new Event('storage'));
-     
+
     setIsProUser(false);
+    setQuotaInfo(null);
     onClose();
   };
 
-  const handleManageSubscription = () => {
-    const proKey = localStorage.getItem('pro_key');
+  const handleManageSubscription = async () => {
+    const proKey = await capacitorStorage.getItem('pro_key');
     window.open(`https://www.xprivo.com/auth/manage?id=${proKey || ''}`, '_blank');
   };
 
@@ -369,7 +382,10 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
     onClose();
   };
 
-  const handleKeyGeneratedClose = (proKey: string) => {
+  const handleKeyGeneratedClose = async (proKey: string) => {
+    await capacitorStorage.setItem('pro_key', proKey);
+    await capacitorStorage.setItem('accountStatus', 'pro');
+    await capacitorStorage.setItem('pro_subscription_type', 'ios_iap');
     localStorage.setItem('pro_key', proKey);
     localStorage.setItem('accountStatus', 'pro');
     localStorage.setItem('pro_subscription_type', 'ios_iap');
@@ -528,7 +544,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         >
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 z-20 w-10 h-10 flex items-center justify-center aspect-square flex-shrink-0 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-white/50 dark:bg-gray-800/50 rounded-full backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="absolute top-3 right-3 z-20 flex-shrink-0 w-10 h-10 min-w-[2.5rem] min-h-[2.5rem] p-0 aspect-square flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-white/50 dark:bg-gray-800/50 rounded-full backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
             aria-label="Close"
           >
             <X size={20} />
@@ -569,13 +585,6 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   </>
                 )}
               </div>
-
-              {/*<h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                {t('upgrade_pro_feature_intro_title')}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto">
-                {t('upgrade_pro_feature_intro_subtitle')}
-              </p>*/}
               <p className="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto hyphens-none">
                 {t('upgrade_pro_feature_intro_subtitle_small')}
               </p>
@@ -596,7 +605,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   <Zap className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  {/* UPDATED TO SHOW DYNAMIC REQUEST COUNT */}
+
                   <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none"> {t('upgrade_pro_feature5_title', { proRequestsCount: proRequestsCount })}</div>
                   <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature5_description')}</div>
                 </div>
@@ -750,6 +759,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         generatedKey={generatedKey}
         skipPayment={isMobile}
         isLoading={isLoadingKey}
+        disableBackdropClose={isMobile}
       />
 
       <AccountCreationOverlay
