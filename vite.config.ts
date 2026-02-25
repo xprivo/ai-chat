@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { copyFileSync } from 'fs';
+import { copyFileSync, cpSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
 // https://vitejs.dev/config/
@@ -17,6 +17,16 @@ export default defineConfig({
         } catch (err) {
           console.warn('Warning: Could not copy SEO files:', err.message);
         }
+        try {
+          const katexFontsSource = resolve('node_modules/katex/dist/fonts');
+          const katexFontsDest = resolve('dist/fonts');
+          if (existsSync(katexFontsSource)) {
+            cpSync(katexFontsSource, katexFontsDest, { recursive: true });
+            console.log('✓ Copied KaTeX fonts to dist/fonts/');
+          }
+        } catch (err) {
+          console.warn('Warning: Could not copy KaTeX fonts:', err.message);
+        }
       }
     }
   ],
@@ -30,7 +40,8 @@ export default defineConfig({
           'file-processing': ['mammoth', 'exceljs', 'heic2any'],
           // Separate chunk for UI components
           'ui-components': ['lucide-react'],
-          // RevenueCat bundled separately for iOS
+          // KaTeX math rendering
+          'katex': ['katex', 'remark-math', 'rehype-katex'],
           // Vendor chunk for React and core dependencies
           'vendor': ['react', 'react-dom', 'localforage']
         }
@@ -47,7 +58,10 @@ export default defineConfig({
       'docx',
       'mammoth',
       'exceljs',
-      'heic2any'
+      'heic2any',
+      'katex',
+      'remark-math',
+      'rehype-katex'
     ]
   },
   define: {

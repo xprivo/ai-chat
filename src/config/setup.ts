@@ -5,7 +5,7 @@ export const SETUP_CONFIG = {
   // App branding
   appName: 'xPrivo',
 
-  appVersion: '2.0.0',
+  appVersion: '2.1.0',
 
   // Branding - Icon in the Menu
   menu_icon: '/assets/logo/xprivo-app.png',
@@ -33,6 +33,8 @@ export const SETUP_CONFIG = {
     // If left undefined, the system will fall back to the dynamic authorization logic.
     // authorization: 'Bearer ...',
   },
+
+  webSearchUsage: 'auto' as 'on' | 'off' | 'auto',
 
   // API Request Configuration
   // Control which parameters are sent to your AI endpoint
@@ -69,7 +71,9 @@ export const SETUP_CONFIG = {
     // Frequency penalty (-2.0 to 2.0)
     // Positive values penalize new tokens based on their frequency in the text so far
     // Leave empty (null) to not include
-    frequency_penalty: null
+    frequency_penalty: null,
+
+    version: 2
   },
   
   // CSRF Protection - if using accounts
@@ -79,31 +83,37 @@ export const SETUP_CONFIG = {
   },
   
   // Legal links
-  privacyPolicyUrl: 'https://www.example.com',
-  termsOfServiceUrl: 'https://www.example.com',
-  imprintUrl: 'https://www.example.com',
+  privacyPolicyUrl: 'https://www.xprivo.com/policy/privacy',//'https://www.example.com',
+  termsOfServiceUrl: 'https://www.xprivo.com/policy/terms',//'https://www.example.com',
+  imprintUrl: 'https://www.xprivo.com/policy/imprint',//'https://www.example.com',
+  aboutUrl: 'https://www.xprivo.com/links/about-xprivo',
 
   invitation: 'on',
 
+  search_auto_suggest: false,
+
   enterprise_button: true,
 
-  add_ads_token: false,
-  add_chat_language: false,
+  add_ads_token: true,
+  add_chat_language: true,
   
   // Consent banner settings
   consentBanner: {
     enabled: true
   },
 
-  get_pro_models: false, // Should be false unless you show special PRO models
+  get_pro_models: true, // Should be false unless you show special PRO models
 
-  // Not serving over a privacy-first provider? Probably set the following to false
-  show_protection_badge: true,
+  show_search_engine: true,  //search engine button in sidebar - false for local deployment
+  show_browser: true,        //mobile browser - false for local deployment
+
+  show_protection_badge: true,  // Not serving over a privacy-first provider? Probably set the following to false
+  show_made_europe: true,       // Not serving from EU set to false
 
   acceptConsentBanner: false, //important to make this true if you use non-functional cookies
 
   showWelcomePersonalisation: 'tone' as 'expert' | 'tone' | '',
   
   // Sponsored content settings
-  get_sponsored_content: false
+  get_sponsored_content: true
 };

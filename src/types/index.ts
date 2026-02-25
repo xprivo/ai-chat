@@ -21,6 +21,7 @@ export interface SearchResult {
   link: string;
   redirect_link: string;
   favicon: string;
+  favicon_url?: string;
   snippet: string;
   snippet_highlighted_words: string[];
   source: string;

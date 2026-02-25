@@ -4,13 +4,13 @@
 
 xPrivo is an open-source AI chat interface and an alternative to ChatGPT/Perplexity that prioritises privacy and control. Chat with xPrivo or any local or external AI model by adding your own API keys. Organise your conversations in workspaces and keep everything local and private. No account is required! Plug-and-play architecture.
 
-ℹ️ By default, most AI assistants use your chats for training and analysis. Even if you opt out of training, your chats will still be anonymised and used for analytics, so you lose control of your valuable thoughts, business ideas and more. By default, xPrivo is private and log-free. You can stay fully worry-free.
+By default, most AI assistants use your chats for training and analysis. Even if you opt out of training, your chats will still be anonymised and used for analytics, so you lose control of your valuable thoughts, business ideas and more. By default, xPrivo is private and log-free. You can stay fully worry-free.
 
-🌐➡ **Try it now at [xprivo.com](https://xprivo.com)** - Use our pre-configured xPrivo model. We use trusted EU-based partners and the best model for your requests, such as GPT-OSS, Mistral 3, DeepSeek V3.2 or Llama, all of which have a zero-logging guarantee. You can also add your own AI providers with custom API keys or self-host for complete control.
+**Try it now at [xprivo.com](https://xprivo.com)** - Use our pre-configured xPrivo model. We use trusted EU-based partners and the best model for your requests, such as GPT-OSS, Mistral 3, DeepSeek V3.2 or Llama, all of which have a zero-logging guarantee. You can also add your own AI providers with custom API keys or self-host for complete control.
 
 **Hosted Solution Benefits:**
 
-- Free Tier: Daily request quota with occasional non-personalized, non-intrusive ads from vetted partners
+- Free Tier: Daily request quota with occasional non-personalized, non-intrusive ads from vetted partners. Web access.
 
 - PRO Upgrade: Unlimited daily requests and ad-free experience
 
@@ -35,43 +35,43 @@ Big sponsors:
 
 xPrivo is designed for users who want a powerful AI chat experience without compromising on privacy:
 
-- **🔒 Privacy-First**: All data stored locally in your browser. No servers, no tracking
-- **🔌 Provider Agnostic**: Connect to any OpenAI-compatible API endpoint
-- **🚀 No Account Required**: Start chatting immediately with your own API keys
-- **⚙️ Full Control**: Self-host or use our hosted version at xprivo.com
-- **🎨 Customizable**: Brand it and theme it the way you like it
+- **Privacy-First**: All data stored locally in your browser. No servers, no tracking
+- **Provider Agnostic**: Connect to any OpenAI-compatible API endpoint
+- **No Account Required**: Start chatting immediately with your own API keys
+- **Full Control**: Self-host or use our hosted version at xprivo.com
+- **Customizable**: Brand it and theme it the way you like it
 
 Whether you're a developer, researcher, or privacy-conscious user, xPrivo provides a clean, modern interface for interacting with AI models on your terms.
 
 ---
 
-## ✨ Features
+## Features
 
 ### Core Functionality
 - **Modern chat interface** with real-time streaming responses
 - **Connect any AI provider**: Local models or OpenAI, Anthropic and more if needed
 - **Dark/light mode** with automatic detection
-- **Multi-language support**: 🇬🇧 English, 🇫🇷🥖🇫🇷 French, 🇩🇪🍺 German, 🇮🇳 Hindi, and more
+- **Multi-language support**: English, French, German, Hindi, and more
 
 ### Advanced Capabilities
-- **📁 File processing**: Upload and discuss PDF, CSV, Excel, and DOC files with @mention system (complex PDFs are still a problem as of now)
-- **📂 Workspaces**: Organize conversations with custom instructions
-- **🤖 AI Experts**: Create specialized assistants with custom knowledge
-- **🔍 Web search integration**: Real-time information retrieval
-- **💾 Import/Export**: Transfer conversations between devices
-- **🎭 Tone preferences**: Personalize AI response styles
+- **File processing**: Upload and discuss PDF, CSV, Excel, and DOC files with @mention system (complex PDFs are still a problem as of now)
+- **Workspaces**: Organize conversations with custom instructions
+- **AI Experts**: Create specialized assistants with custom knowledge
+- **Web search integration**: Real-time information retrieval
+- **Import/Export**: Transfer conversations between devices
+- **Tone preferences**: Personalize AI response styles
 
 ### User Experience
-- **📱 Fully responsive** design for mobile and desktop
-- **⚡ Fast and lightweight** - no bloat and kept minimalistic
-- **🎨 Customizable branding** and assistant icons
-- **🌍 Accessible** from anywhere via [xprivo.com](https://xprivo.com)
+- **Fully responsive** design for mobile and desktop
+- **Fast and lightweight** - no bloat and kept minimalistic
+- **Customizable branding** and assistant icons
+- **Accessible** from anywhere via [xprivo.com](https://xprivo.com)
 
 ---
 
-## 🚀 Quick Start / Installation
+## Quick Start / Installation
 
-### Option 1: Use the Hosted Version (Recommended)
+### Option 1: Use the Hosted Version
 
 Simply visit **[xprivo.com](https://xprivo.com)** and start chatting.
 
@@ -123,15 +123,18 @@ defaultProvider: {
 }
 ```
 
-> ⚠️ **Important**: When running locally, you may encounter CORS issues with some AI providers. See the [Backend Proxy Setup](#-backend-proxy-setup) section to resolve this.
+> **Important**: When running locally and calling external endpoints, you may encounter CORS issues with some AI providers. See the [Backend Proxy Setup](#-backend-proxy-setup) section to resolve this.
 
 ---
 
-## 🔧 Backend Proxy Setup
+## Backend Proxy Setup
 
 ### When Do You Need This?
 
-Some AI providers (like Anthropic, etc.) may block direct API requests from your browser due to CORS (Cross-Origin Resource Sharing) restrictions. If you encounter CORS errors, you'll need to proxy requests through your own server.
+Some API providers (like Openrouter, etc.) may block direct API requests from your browser due to CORS (Cross-Origin Resource Sharing) restrictions. If you encounter CORS errors, you'll need to proxy requests through your own server.
+You could set this up with a lightweight Node.js proxy server with an OpenAI-compatible endpoint structure.
+
+Once your "middleman" proxy server is running, you can do the following in the frontend:.
 
 In the chat interface, go to **Settings > Configure AI Models & Endpoints** and add:
 - **Name**: MyCoolAiProvider (or your preferred name)
@@ -139,9 +142,11 @@ In the chat interface, go to **Settings > Configure AI Models & Endpoints** and 
 - **Authorization**: (leave empty or use `Bearer dummy` - auth is handled by proxy)
 - **Model**: `llama-3.3` (or your chosen model)
 
+You need to route the models to the correct AI provider in the backend.
+
 ---
 
-## ⚙️ Customization
+## Customization
 
 ### Request Configuration
 
@@ -156,7 +161,7 @@ apiRequestConfig: {
 }
 ```
 
-> ⚠️ **Note**: These settings apply to **all models** in your configuration.
+> **Note**: These settings apply to **all models** in your configuration.
 
 ### Branding Your App
 
@@ -187,7 +192,7 @@ Add new languages in `src/translations/index.ts` by including all required trans
 
 ---
 
-## 🏗️ Building for Production
+## Building for Production
 
 ```bash
 npm run build
@@ -197,14 +202,16 @@ The optimized build will be in the `dist/` folder, ready for deployment to any s
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Chat not working?
 
-- ✅ Verify your API endpoint URL is correct and includes the proper path (e.g., `/v1/chat/completions`)
-- ✅ Confirm your API key/bearer token is valid
-- ✅ Ensure the model name matches exactly what your provider expects
-- ✅ Check browser console for error messages
+- Verify your API endpoint URL is correct and .includes the proper path (e.g., `/v1/chat/completions`).
+- Confirm your API key/bearer token is valid
+- Ensure that the model name matches exactly what your provider expects.
+- Check the browser console for error messages.
+- Test Cross-Origin Resource Sharing (CORS).
+- Check whether it is an OpenAI-compatible API.
 
 ### CORS errors?
 
@@ -212,18 +219,19 @@ See the **[Backend Proxy Setup](#-backend-proxy-setup)** section above to proxy 
 
 ### File uploads failing?
 
-- Ensure files are under the size limit (10MB default)
+- Check that the files are under the size limit. This is 10 MB, but this may be increased in newer versions, so check for yourself.
 - Verify the file type is supported (PDF, CSV, Excel, DOC)
 
-### Streaming responses not appearing?
+### Streaming responses not appearing or getting a "Try again later" error?
 
-- Confirm your API endpoint supports Server-Sent Events (SSE)
-- Check for CORS issues in browser console
-- Verify your proxy server (if using one) properly forwards streaming responses
+- Confirm your API endpoint supports Server-Sent Events (SSE).
+- Check for CORS issues in the browser console.
+- Verify that your proxy server (if using one) is forwarding streaming responses properly.
+- Remove any special parameters sent in the header. (Paramters starting with X-...)
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **React 18** with TypeScript
 - **Tailwind CSS** for styling
@@ -233,75 +241,14 @@ See the **[Backend Proxy Setup](#-backend-proxy-setup)** section above to proxy 
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions from the community! Here's how you can help:
-
-### Reporting Issues & Requesting Features
-
-Found a bug or have a feature idea? Please open an issue:
-
-1. Go to the [Issues](../../issues) page
-2. Click "New Issue"
-3. Choose the appropriate template:
-   - **🐛 Bug Report**: For errors, crashes, or unexpected behavior
-   - **✨ Feature Request**: For new functionality or improvements
-   - **💬 General Feedback**: For questions or suggestions
-
-### Contributing Code
-
-We'd love to have your contributions! Follow these steps:
-
-1. **Fork the repository** by clicking the "Fork" button at the top right
-2. **Clone your fork**:
-   ```bash
-   git clone https://github.com/YOUR-USERNAME/xprivo-ai-chat.git
-   cd xprivo-ai-chat
-   ```
-3. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-4. **Make your changes** and commit:
-   ```bash
-   git commit -m 'Add amazing feature'
-   ```
-5. **Push to your fork**:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-6. **Open a Pull Request**:
-   - Go to the original repository
-   - Click "New Pull Request"
-   - Select your fork and branch
-   - Describe your changes clearly
-   - Submit!
-
-We'll review your PR and provide feedback. Once approved, your code will be merged into the main repository. Thank you for contributing! 🎉
-
-### Development Guidelines
-
-- Write clean, readable code with comments where needed
-- Follow the existing code style and structure
-- Test your changes thoroughly before submitting
-- Update documentation if you're adding new features
-- Make sure visible text is translated in the translations to all the existing languages (you can use tools like deepl or another reliable AI)
-
----
-
-## 📄 License
+## License
 
 This project is licensed under the **AGPLv3 License** - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🌟 Support the Project
+## Support the Project
 
-If you find xPrivo useful, please:
-
-- ⭐ Star this repository
-- 🐛 Report bugs and suggest features via [Issues](../../issues)
-- 🔀 Contribute code via Pull Requests
-- 📢 Share with others who value privacy
+If you find xPrivo useful, please star this repository and report any bugs or suggest new features via the [Issues](../../issues) tab. You can also share it with others who value privacy.
 
 Built with ❤️ for the privacy-conscious community.
