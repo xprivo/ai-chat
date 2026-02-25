@@ -2,7 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Mobile-first responsive design */
+.dark .katex,
+.dark .katex * {
+  color: #e5e7eb;
+}
+
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+  max-width: 100% !important;
+  width: 100%;
+  box-sizing: border-box !important;
+}
+
+.katex-html,
+.dark .katex-html,
+.dark .katex-html *:not(svg):not(path) {
+  background: transparent !important;
+}
+
+span.katex {
+  font-size: 1em;
+}
+
 @media (max-width: 640px) {
   body {
     font-size: 14px;
@@ -25,6 +48,14 @@
 * {
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.katex,
+.katex *,
+.katex-display,
+.katex-display * {
+  max-width: none !important;
+  box-sizing: content-box;
 }
 
 .w-full, .max-w-full {
@@ -127,7 +158,7 @@ html.dark body {
   width: 100%;
 }
 
-.chat-container * {
+.chat-container *:not(.katex):not(.katex *):not(.katex-display):not(.katex-display *) {
   max-width: 100% !important;
   box-sizing: border-box !important;
 }

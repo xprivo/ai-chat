@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 
 import { Browser } from '@capacitor/browser';
 import { restorePurchases } from '../../utils/revenueCatDummy';
-import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart, Search } from 'lucide-react';
+import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart, Search, Languages, Check, Lightbulb, SquarePen, Info, Shield, Trash2} from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useTheme } from '../../hooks/useTheme';
 import { useDateSetting, useFiles } from '../../hooks/useLocalStorage';
@@ -21,7 +21,8 @@ import { ExpertLimitOverlay } from '../UI/ExpertLimitOverlay';
 import { ToneSelectionOverlay } from '../UI/ToneSelectionOverlay';
 import { SearchAllChatsOverlay } from './SearchAllChatsOverlay';
 import { SETUP_CONFIG } from '../../config/setup';
-import { storage } from '../../utils/storage';
+import { storage, chatStore, workspaceStore, fileStore, settingsStore } from '../../utils/storage';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 import { getTonePreference, saveTonePreference } from '../../utils/toneStorage';
 
 interface SidebarProps {
@@ -67,7 +68,7 @@ export function Sidebar({
   onUpdateExperts,
   onDeleteExpert,
   onNewChatWithExpert,
-  onShowProOverlay
+  onShowProOverlay,
 }: SidebarProps) {
   const { t, language, setLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
@@ -101,13 +102,16 @@ export function Sidebar({
     }
   });
   const [chatTitles, setChatTitles] = useState<Record<string, string>>({});
-  const [isIOS, setIsIOS] = useState(false);
+  const [isIOS, setIsIOS] = useState(false); 
   const [hasProKey, setHasProKey] = useState(false);
   const [showRestoreSuccess, setShowRestoreSuccess] = useState(false);
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
   const [isIOSBrowser, setIsIOSBrowser] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
   const [showSearchAllOverlay, setShowSearchAllOverlay] = useState(false);
+  const [showLanguageChangeOverlay, setShowLanguageChangeOverlay] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -130,13 +134,17 @@ export function Sidebar({
   }, []);
 
   useEffect(() => {
-    const checkProKey = () => {
-      const proKey = localStorage.getItem('pro_key');
+    const checkProKey = async () => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       setHasProKey(!!proKey);
     };
     checkProKey();
     window.addEventListener('storage', checkProKey);
-    return () => window.removeEventListener('storage', checkProKey);
+    window.addEventListener('accountStatusChanged', checkProKey);
+    return () => {
+      window.removeEventListener('storage', checkProKey);
+      window.removeEventListener('accountStatusChanged', checkProKey);
+    };
   }, []);
 
   useEffect(() => {
@@ -177,7 +185,7 @@ export function Sidebar({
       setChatTitles(prev => ({ ...prev, [chatId]: title }));
     };
     window.addEventListener('chatTitleUpdated', handleChatTitleUpdate as EventListener);
-    return () => {
+  return () => {
       window.removeEventListener('chatTitleUpdated', handleChatTitleUpdate as EventListener);
     };
   }, []);
@@ -308,6 +316,42 @@ export function Sidebar({
     setShowDeleteAllConfirm(false);
   };
 
+  const clearAllLocalData = async () => {
+    await capacitorStorage.clear();
+    localStorage.clear();
+    try {
+      await chatStore.clear();
+      await workspaceStore.clear();
+      await fileStore.clear();
+      await settingsStore.clear();
+    } catch {}
+    window.location.reload();
+  };
+
+  const handleDeleteAccountConfirm = async () => {
+    setIsDeletingAccount(true);
+    if (hasProKey) {
+      try {
+        const proKey = await capacitorStorage.getItem('pro_key');
+        const response = await fetch('https://www.xprivo.com/auth/delete-account.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pro_key: proKey }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            await clearAllLocalData();
+            return;
+          }
+        }
+      } catch {}
+      setIsDeletingAccount(false);
+    } else {
+      await clearAllLocalData();
+    }
+  };
+
   const handleMyAccountClick = async () => {
     switch (SETUP_CONFIG.pro_switcher) {
       case 'off': {
@@ -348,10 +392,13 @@ export function Sidebar({
   const faqUrl = language === "en" ? "https://www.xprivo.com/mission/#faq" : `https://www.xprivo.com/mission/${language}#faq`;
   const blogUrl = language === "de" ? "https://www.xprivo.com/blog/de/" : `https://www.xprivo.com/blog/`;
   const enterpriseUrl = "https://www.xprivo.com/plus/enterprise";
+  const adsUrl = "https://www.xprivo.com/advertise";
+   const privacySimpleUrl = language === 'es' ? 'https://www.xprivo.com/data/es' : language === 'fr' ? 'https://www.xprivo.com/data/fr' : language === 'de' ? 'https://www.xprivo.com/data/de' : 'https://www.xprivo.com/data';
   const privacyPolicyUrl = SETUP_CONFIG.privacyPolicyUrl;
   const termsOfServiceUrl = SETUP_CONFIG.termsOfServiceUrl;
   const impressumUrl = SETUP_CONFIG.imprintUrl;
   const xUrl = "https://www.xprivo.com/mobileapp/xlink";
+  const redditUrl = "https://www.xprivo.com/mobileapp/redditlink";
   const instagramUrl = "https://instagram.com/xprivo_com";
   const facebookUrl = "https://facebook.com/xprivo";
 
@@ -375,6 +422,25 @@ export function Sidebar({
       <option value="hi">🇮🇳 {t('languageHindi')}</option>
     </>
   );
+
+  const appLanguageOptions: { value: Language; label: string }[] = [
+    { value: 'bg', label: '\u{1F1E7}\u{1F1EC} ' + t('languageBulgarian') },
+    { value: 'hr', label: '\u{1F1ED}\u{1F1F7} ' + t('languageCroatian') },
+    { value: 'cs', label: '\u{1F1E8}\u{1F1FF} ' + t('languageCzech') },
+    { value: 'da', label: '\u{1F1E9}\u{1F1F0} ' + t('languageDanish') },
+    { value: 'nl', label: '\u{1F1F3}\u{1F1F1} ' + t('languageDutch') },
+    { value: 'en', label: '\u{1F1FA}\u{1F1F8} ' + t('languageEnglish') },
+    { value: 'fr', label: '\u{1F1EB}\u{1F1F7} ' + t('languageFrench') },
+    { value: 'de', label: '\u{1F1E9}\u{1F1EA} ' + t('languageGerman') },
+    { value: 'el', label: '\u{1F1EC}\u{1F1F7} ' + t('languageGreek') },
+    { value: 'it', label: '\u{1F1EE}\u{1F1F9} ' + t('languageItalian') },
+    { value: 'pl', label: '\u{1F1F5}\u{1F1F1} ' + t('languagePolish') },
+    { value: 'pt', label: '\u{1F1F5}\u{1F1F9} ' + t('languagePortuguese') },
+    { value: 'sl', label: '\u{1F1F8}\u{1F1EE} ' + t('languageSlovenian') },
+    { value: 'es', label: '\u{1F1EA}\u{1F1F8} ' + t('languageSpanish') },
+    { value: 'sv', label: '\u{1F1F8}\u{1F1EA} ' + t('languageSwedish') },
+    { value: 'hi', label: '\u{1F1EE}\u{1F1F3} ' + t('languageHindi') },
+  ];
 
   return (
     <>
@@ -401,58 +467,66 @@ export function Sidebar({
             </button>
           </div> 
      
-          <div className="p-2 sm:p-3 space-y-1.5 sm:space-y-2">
+          <div className="py-1 flex-shrink-0">
                 <button
                   onClick={onNewChat}
-                  className="w-full inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-sm sm:text-sm"
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
                 >
-                  <Plus size={14} className="mr-1.5" />
+                  <SquarePen size={16} className="flex-shrink-0" />
                   {t('newChat')}
                 </button>
 
-                <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2">
-                  <button
-                    onClick={() => setShowWorkspaceModal(true)}
-                    className="inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 text-xs"
-                  >
-                    <Plus size={12} className="mr-1" />
-                    {t('newWorkspace')}
-                  </button>
-                  <button
-                    onClick={() => setShowExpertsListView(true)}
-                    className="inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 px-2 sm:px-3 py-1 sm:py-1.5 text-xs"
-                  >
-                    <Plus size={12} className="mr-1" />
-                    {t('experts_label')}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteAllConfirm(true)}
-                    className="inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 border px-2 sm:px-3 py-1 sm:py-1.5 text-xs text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-600 dark:hover:bg-red-900/20"
-                  >
-                    <Flame
-                      className="w-4 h-4 min-[450px]:w-3 min-[450px]:h-3 min-[450px]:mr-1"
-                    />
-                    <span className="hidden min-[450px]:inline">
-                      {t('deleteAllChats')}
-                    </span>
-                  </button>
-                </div>
           </div>
- 
-          <div className="flex-1 overflow-auto">
+
+          <div className="flex-1 overflow-auto">
+            <div className="py-1">
+                <button
+                  onClick={() => setShowWorkspaceModal(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+                >
+                  <Plus size={16} className="flex-shrink-0" />
+                  {t('newWorkspace')}
+                </button>
+
+                <button
+                  onClick={() => setShowExpertsListView(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+                >
+                  <Lightbulb size={16} className="flex-shrink-0" />
+                  {t('experts_label')}
+                </button>
+
+                <button
+                  onClick={() => setShowDeleteAllConfirm(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+                >
+                  <Flame size={16} className="flex-shrink-0" />
+                  {t('deleteAllChats')}
+                </button>
+             {regularChats.length >= 2 && (
+                    <button
+                      onClick={() => setShowSearchAllOverlay(true)}
+                       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+                    >
+                      <Search size={14} />
+                      {t('search_all') || 'Search All'}
+                    </button>
+                  )}
+            </div>
             {workspaces.length > 0 && (
-              <div className="mb-4">
-                <h3 className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('workspaces')}</h3>
+              <div className="mb-2">
+                <h3 className="px-3 sm:px-4 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 tracking-wide">{t('workspaces')}</h3>
                 <WorkspaceList workspaces={workspaces} chats={chats} onSelectChat={onSelectChat} onNewChatInWorkspace={onNewChatInWorkspace} onAddChatsToWorkspace={onAddChatsToWorkspace} onRemoveChatsFromWorkspace={onRemoveChatsFromWorkspace} onUpdateWorkspace={onUpdateWorkspace} onDeleteWorkspace={onDeleteWorkspace} selectedChatId={selectedChatId} />
               </div>
             )}
             <div className="px-3 sm:px-4">
+              <h3 className="py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 tracking-wide">{t('sidebar_your_chats')}</h3>
               {regularChats.length === 0 ? (
                 <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 py-2">{t('noChatsYet')}</p>
               ) : (
                 <div className="space-y-1">
                   {(showAllChats ? regularChats : regularChats.slice(0, 20)).map((chat) => (
-                    <button key={chat.id} onClick={() => onSelectChat(chat.id)} className={`w-full text-left px-2 py-2 sm:py-1 rounded text-xs sm:text-sm truncate transition-colors ${ selectedChatId === chat.id ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800' }`}>
+                    <button key={chat.id} onClick={() => onSelectChat(chat.id)} className={`w-full text-left px-2 py-2 sm:py-1 rounded text-sm sm:text-sm truncate transition-colors ${ selectedChatId === chat.id ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800' }`}>
                       {chatTitles[chat.id] || chat.title}
                     </button>
                   ))}
@@ -465,21 +539,11 @@ export function Sidebar({
                       {t('show_more') || `Show ${regularChats.length - 20} more...`}
                     </button>
                   )}
-
-                  {regularChats.length >= 2 && (
-                    <button
-                      onClick={() => setShowSearchAllOverlay(true)}
-                      className="w-full text-center px-2 py-2 rounded text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium flex items-center justify-center gap-1.5"
-                    >
-                      <Search size={14} />
-                      {t('search_all') || 'Search All'}
-                    </button>
-                  )}
                 </div>
               )}
             </div>
-          </div>
-  
+
+          </div>
           <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -494,7 +558,7 @@ export function Sidebar({
                   onClick={handleMyAccountClick}
                   className="flex-1 max-w-[90px] sm:max-w-[100px] flex items-center justify-center gap-1 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-[#d9a420]/10 dark:text-[#d9a420] dark:border dark:border-[#d9a420]/20 dark:hover:bg-[#d9a420]/20 whitespace-nowrap"
                 >
-                  {!isIOS && <User size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />}
+                  {!isIOS && <Info size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />}
                   PLUS+
                 </button>
               </div>
@@ -502,14 +566,6 @@ export function Sidebar({
               {!isIOS ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <div className="relative" style={{ flexBasis: '100px' }}>
-                      <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} className="w-full px-2 py-1.5 sm:py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none cursor-pointer" style={{ fontSize: '11px' }}>
-                        {languageOptions}
-                      </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </div>
-                    </div>
                     <button onClick={() => setShowSettings(true)} className="relative flex items-center gap-1.5 px-2 py-1.5 sm:py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap" title={t('settings')}>
                       <Settings size={18} />
                       <span>{t('settings')}</span>
@@ -527,9 +583,23 @@ export function Sidebar({
                       <a href={sponsorUrl} onClick={(e) => handleLinkClick(e, sponsorUrl)} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"><Heart size={14} /><span>{t('footer_sponsor')}</span></a>
                       {SETUP_CONFIG.invitation === 'on' && (<button onClick={() => setShowInviteFriends(true)} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"><Gift size={14} /><span>{t('footer_invite')}</span></button>)}
                       <div className="flex items-center gap-[15px]">
-                        <a href={xUrl} onClick={(e) => handleLinkClick(e, xUrl)} target="_blank" rel="noopener noreferrer" aria-label="X"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="X logo"><path d="M12.6.75h2.45l-5.36 6.14L16 15.25h-4.94l-3.87-5.07-4.42 5.07H.32l5.73-6.57L0 .75h5.06l3.49 4.63L12.6.75Zm-.86 13.03h1.36L4.32 2.15H2.87z" /></svg></a>
-                        {/*<a href={instagramUrl} onClick={(e) => handleLinkClick(e, instagramUrl)} target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="Instagram logo"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.9 3.9 0 0 0-1.417.923A3.9 3.9 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.9 3.9 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.9 3.9 0 0 0-.923-1.417A3.9 3.9 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599s.453.546.598.92c.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.5 2.5 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.5 2.5 0 0 1-.92-.598 2.5 2.5 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.233s.008-2.388.046-3.231c.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92s.546-.453.92-.598c.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045zm4.988 1.328a.96.96 0 1 0 0 1.92.96.96 0 0 0 0-1.92m-4.27 1.122a4.109 4.109 0 1 0 0 8.217 4.109 4.109 0 0 0 0-8.217m0 1.441a2.667 2.667 0 1 1 0 5.334 2.667 2.667 0 0 1 0-5.334"/></svg></a>*/}
-                        {/*<a href={facebookUrl} onClick={(e) => handleLinkClick(e, facebookUrl)} target="_blank" rel="noopener noreferrer" aria-label="Visit my Facebook profile"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="Facebook logo"><path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951"/></svg></a>*/}
+                        <a 
+                          href={redditUrl} 
+                          onClick={(e) => handleLinkClick(e, redditUrl)} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          aria-label="Reddit"
+                        >
+                          <svg 
+                            width="16" 
+                            height="16" 
+                            viewBox="0 0 24 24" 
+                            fill="currentColor" 
+                            aria-label="Reddit logo"
+                          >
+                            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" />
+                          </svg>
+                        </a>
                       </div>
                     </div>
                   </div>
@@ -537,23 +607,7 @@ export function Sidebar({
               ) : (
                 <div className="pt-2 space-y-3">
                   <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded-xl">
-                    <div className="relative">
-                      <select value={language} onChange={(e) => setLanguage(e.target.value as Language)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" aria-label={t('change_language')}>
-                        {languageOptions}
-                      </select>
-                      <div className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white pointer-events-none rounded-t-xl">
-                        <div className="flex items-center gap-3">
-                          <Globe size={20} className="text-gray-500 dark:text-gray-400" />
-                          <span>{t('language')}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 dark:text-gray-400">{language.toUpperCase()}</span>
-                          <ChevronRight size={16} className="text-gray-400" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
-                    <button onClick={() => setShowSettings(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-b-xl">
+                    <button onClick={() => setShowSettings(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-xl">
                       <div className="flex items-center gap-3">
                         <Settings size={20} className="text-gray-500 dark:text-gray-400" />
                         <span>{t('settings')}</span>
@@ -584,6 +638,39 @@ export function Sidebar({
           </div>
         </div>
       </Modal>
+
+      {showDeleteAccountConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10020] flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-neutral-800">
+            <div className="p-6">
+             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">{t('delete_account')}</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed mb-6">
+                {hasProKey
+                  ? t('delete_account_pro_warning')
+                  : t('delete_local_data_warning')
+                }
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={handleDeleteAccountConfirm}
+                  disabled={isDeletingAccount}
+                  className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
+                >
+                  {isDeletingAccount ? t('deleting') : t('delete')}
+                </button>
+                <button
+                  onClick={() => setShowDeleteAccountConfirm(false)}
+                  disabled={isDeletingAccount}
+                  className="w-full py-3 px-4 bg-gray-200 hover:bg-gray-300 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {showSettings && (
         !isIOS ? (
@@ -628,6 +715,12 @@ export function Sidebar({
                     <button onClick={() => setTheme('system')} className={`px-4 py-2 text-sm rounded-lg border transition-colors ${ theme === 'system' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600' }`}>{t('systemMode')}</button>
                   </div>
                 </div>
+        <div>
+         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('sidebar_settings_change_language')}</label>
+         <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowLanguageChangeOverlay(true)} className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"><Languages size={16} />{t('search_change_language') || 'Sprache \u00e4ndern'}</button>
+         </div>
+        </div>
                 <div>
                   <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer">
                     <input type="checkbox" checked={useCurrentDate} onChange={(e) => saveDateSetting(e.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
@@ -687,8 +780,33 @@ export function Sidebar({
                       {t('for_enterprise')}
                     </a>
                     )}
-                    <a href={xUrl} onClick={(e) => handleLinkClick(e, xUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                    {/*<a href={xUrl} onClick={(e) => handleLinkClick(e, xUrl)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="X logo"><path d="M12.6.75h2.45l-5.36 6.14L16 15.25h-4.94l-3.87-5.07-4.42 5.07H.32l5.73-6.57L0 .75h5.06l3.49 4.63L12.6.75Zm-.86 13.03h1.36L4.32 2.15H2.87z" /></svg> {t('follow_x')} 
+                    </a>*/}
+                    <a 
+                          href={redditUrl} 
+                          onClick={(e) => handleLinkClick(e, redditUrl)} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          aria-label="Reddit"
+                         className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                          <svg 
+                            width="16" 
+                            height="16" 
+                            viewBox="0 0 24 24" 
+                            fill="currentColor" 
+                            aria-label="Reddit logo"
+                          >
+                            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" />
+                          </svg> {t('follow_x')} 
+                        </a>
+                     <a href={adsUrl}  onClick={(e) => handleLinkClick(e, adsUrl)} className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                      <Info size={16} />
+                      {t('search_footer_advertise')}
+                    </a>
+                     <a href={privacySimpleUrl}  onClick={(e) => handleLinkClick(e, privacySimpleUrl)} className="inline-flex items-center gap-2 px-4 py-2 text-sm rounded-lg border bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                      <Shield size={16} />
+                      {t('general_privacy')}
                     </a>
                   </div>
                 </div>
@@ -737,6 +855,22 @@ export function Sidebar({
                     </div>
                   </div>
                 </div>
+
+        <div className="space-y-1">
+         <p className="px-3 text-xs text-gray-500 dark:text-gray-400 uppercase">{t('sidebar_settings_change_language')}</p>
+         <div className="bg-white dark:bg-gray-800 rounded-xl">
+          <button onClick={() => setShowLanguageChangeOverlay(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-100/50 dark:hover:bg-gray-700/50 rounded-xl">
+           <div className="flex items-center gap-3">
+            <Languages size={20} className="text-gray-500 dark:text-gray-400" />
+            <span>{t('search_change_language')}</span>
+           </div>
+           <div className="flex items-center gap-2">
+            <span className="text-gray-500 dark:text-gray-400 text-xs">{language.toUpperCase()}</span>
+            <ChevronRight size={16} className="text-gray-400" />
+           </div>
+          </button>
+         </div>
+        </div>
 
                 <div className="space-y-1">
                   <p className="px-3 text-xs text-gray-500 dark:text-gray-400 uppercase">{t('settings_chat_settings')}</p>
@@ -810,6 +944,18 @@ export function Sidebar({
                       </div>
                       <ChevronRight size={16} className="text-gray-400" />
                     </button>
+                    {isIOS && (
+                    <>
+                      <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
+                      <button onClick={() => setShowDeleteAccountConfirm(true)} className="flex items-center justify-between w-full p-3 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100/50 dark:hover:bg-gray-700/50">
+                        <div className="flex items-center gap-3">
+                          <Trash2 size={20} className="text-red-500 dark:text-red-400" />
+                          <span>Delete Account</span>
+                        </div>
+                        <ChevronRight size={16} className="text-red-400" />
+                      </button>
+                    </>
+                    )}
                     <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
                     <button
                       onClick={async () => {
@@ -838,6 +984,7 @@ export function Sidebar({
                                 const proKey = checkSubscriberData.pro_key;
 
                                 if (proKey) {
+                                  await capacitorStorage.setItem('pro_key', proKey);
                                   localStorage.setItem('pro_key', proKey);
                                   window.dispatchEvent(new Event('storage'));
                                 }
@@ -1153,6 +1300,45 @@ export function Sidebar({
         chats={chats}
         onSelectChat={onSelectChat}
       />
+ 
+      {showLanguageChangeOverlay && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowLanguageChangeOverlay(false)} />
+          <div className="relative w-[calc(100%-20px)] max-w-[500px] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-h-[70vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <Languages size={16} className="text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">{t('search_change_language')}</h3>
+              </div>
+              <button
+                onClick={() => setShowLanguageChangeOverlay(false)}
+                className="w-8 h-8 min-w-[2rem] min-h-[2rem] aspect-square rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0"
+              >
+                <X size={16} className="flex-shrink-0" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-0.5">
+              {appLanguageOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setLanguage(opt.value);
+                    setShowLanguageChangeOverlay(false);
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors ${
+                    language === opt.value
+                      ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white font-medium'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  }`}
+                >
+                  <span className="flex-1 text-left">{opt.label}</span>
+                  {language === opt.value && <Check size={16} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
         </>
   );
 }

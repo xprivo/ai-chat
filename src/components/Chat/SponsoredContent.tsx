@@ -1,4 +1,5 @@
 import React from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Mail, Shield, ShoppingBag, Speaker, Sparkles, Gift } from 'lucide-react';
 
 interface SponsoredAd {
@@ -9,6 +10,7 @@ interface SponsoredAd {
   sponsored_notice: 'sponsored' | 'partner' | 'offer' | 'promoted';
   save_text: string;
   url: string;
+  visible_url: string;
   image: string;
   svg: 'shopping' | 'speaker' | 'sparkle' | 'gift' | 'mail' | 'shield' | '';
   advertiser_name: string;
@@ -56,8 +58,14 @@ export function SponsoredContent({ ads, t }: SponsoredContentProps) {
     }
   };
 
-  const handleAdClick = (url: string) => {
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleAdClick = (url: string, title?: string) => {
+    if (Capacitor.isNativePlatform()) {
+      window.dispatchEvent(new CustomEvent('openInBrowser', {
+        detail: { url, title: title || '', description: '', favicon: '' },
+      }));
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   };
 
   return (
@@ -65,7 +73,7 @@ export function SponsoredContent({ ads, t }: SponsoredContentProps) {
       {ads.map((ad) => (
         <div
           key={ad.id}
-          onClick={() => handleAdClick(ad.url)}
+          onClick={() => handleAdClick(ad.url, ad.sponsored_title)}
           className="relative bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-750 transition-all duration-200 hover:scale-[1.02] group flex-shrink-0 text-[14px] max-w-[300px] basis-[300px] min-[400px]:max-w-[350px] min-[400px]:basis-[350px]"
         > 
           {ad.save_text && (

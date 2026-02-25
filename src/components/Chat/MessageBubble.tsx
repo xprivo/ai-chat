@@ -2,7 +2,10 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
+import rehypeKatex from 'rehype-katex';
+import { Capacitor } from '@capacitor/core';
 import { Bot, Edit2, RotateCcw, AlertCircle, Copy, Check, Info, Split, FileEdit, Download } from 'lucide-react';
 import { Message, ImageReference } from '../../types';
 import { FileChip } from './FileChip';
@@ -21,6 +24,215 @@ interface MessageBubbleProps {
   onRetry: (messageId: string) => void;
   onSplit?: (messageId: string) => void;
   isStreaming?: boolean;
+}
+
+const LATEX_CMD = /\\(?:sum|prod|int|oint|iint|iiint|lim|sup|inf|frac|tfrac|dfrac|sqrt|infty|alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|vartheta|iota|kappa|lambda|mu|nu|xi|pi|varpi|rho|varrho|sigma|varsigma|tau|upsilon|phi|varphi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Upsilon|Phi|Psi|Omega|forall|exists|nexists|nabla|partial|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|sim|simeq|cong|propto|subset|supset|subseteq|supseteq|in|notin|cup|cap|wedge|vee|neg|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|Leftrightarrow|to|gets|mapsto|ldots|cdots|vdots|ddots|hat|bar|vec|dot|tilde|widehat|widetilde|overline|underline|overbrace|underbrace|mathbb|mathbf|mathrm|mathit|mathcal|text|binom|pmatrix|bmatrix|vmatrix|matrix|begin|end|left|right|langle|rangle|lceil|rceil|lfloor|rfloor|ln|log|exp|sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|max|min|gcd|det|ker|dim|deg|mod|bmod|pmod)\b/;
+
+type Segment = { type: 'code' | 'display' | 'inline' | 'text'; content: string };
+
+function tokenize(input: string): Segment[] {
+  const segments: Segment[] = [];
+  let i = 0;
+  let textStart = 0;
+
+  const flushText = (end: number) => {
+    if (end > textStart) segments.push({ type: 'text', content: input.slice(textStart, end) });
+  };
+
+  while (i < input.length) {
+    // Fenced code block ```...```
+    if (input[i] === '`' && input[i + 1] === '`' && input[i + 2] === '`') {
+      flushText(i);
+      const closeIdx = input.indexOf('```', i + 3);
+      if (closeIdx !== -1) {
+        const end = closeIdx + 3;
+        segments.push({ type: 'code', content: input.slice(i, end) });
+        i = end;
+        textStart = i;
+      } else {
+        i++;
+      }
+      continue;
+    }
+
+    // Inline code `...`
+    if (input[i] === '`') {
+      flushText(i);
+      const closeIdx = input.indexOf('`', i + 1);
+      if (closeIdx !== -1) {
+        const end = closeIdx + 1;
+        segments.push({ type: 'code', content: input.slice(i, end) });
+        i = end;
+        textStart = i;
+      } else {
+        i++;
+      }
+      continue;
+    }
+
+    // Display math $$...$$
+    if (input[i] === '$' && input[i + 1] === '$') {
+      flushText(i);
+      i += 2;
+      const start = i;
+      let found = false;
+      while (i < input.length - 1) {
+        if (input[i] === '$' && input[i + 1] === '$') {
+          const mathContent = input.slice(start, i).trim();
+          segments.push({ type: 'display', content: mathContent });
+          i += 2;
+          textStart = i;
+          found = true;
+          break;
+        }
+        i++;
+      }
+      if (!found) {
+        // Unclosed $$ (streaming): treat remaining content as display math in progress
+        const mathContent = input.slice(start).trim();
+        segments.push({ type: 'display', content: mathContent });
+        i = input.length;
+        textStart = i;
+      }
+      continue;
+    }
+
+    // Inline math $...$  (only if content looks like math — no newlines, properly closed, has math chars)
+    if (input[i] === '$') {
+      const j = i + 1;
+      let closeJ = -1;
+      let k = j;
+      while (k < input.length) {
+        if (input[k] === '\n') break;
+        if (input[k] === '$' && input[k - 1] !== '\\') { closeJ = k; break; }
+        k++;
+      }
+      if (closeJ !== -1 && closeJ > j) {
+        const mathContent = input.slice(j, closeJ).trim();
+        const looksLikeMath = mathContent.length > 0 && (
+          LATEX_CMD.test(mathContent) ||
+          /[_^{}\\]/.test(mathContent) ||
+          /[A-Za-z][0-9]/.test(mathContent)
+        );
+        if (looksLikeMath) {
+          flushText(i);
+          segments.push({ type: 'inline', content: mathContent });
+          i = closeJ + 1;
+          textStart = i;
+          continue;
+        }
+      }
+      i++;
+      continue;
+    }
+
+    // Bare \begin{env}...\end{env}
+    if (input[i] === '\\' && input.slice(i, i + 7) === '\\begin{') {
+      const envMatch = input.slice(i).match(/^\\begin\{([^}]+)\}/);
+      if (envMatch) {
+        const env = envMatch[1];
+        const closeTag = `\\end{${env}}`;
+        const closeIdx = input.indexOf(closeTag, i + envMatch[0].length);
+        if (closeIdx !== -1) {
+          flushText(i);
+          const envContent = input.slice(i, closeIdx + closeTag.length);
+          segments.push({ type: 'display', content: envContent });
+          i = closeIdx + closeTag.length;
+          textStart = i;
+          continue;
+        }
+      }
+    }
+
+    i++;
+  }
+
+  flushText(input.length);
+  return segments;
+}
+
+function unescapeDisplayBackslashes(s: string): string {
+  return s.replace(/\\\\([a-zA-Z({[\^_])/g, '\\$1');
+}
+
+// Maybe we need to modify this in the future - let's see
+function normalizeDelimitersInText(text: string): string {
+  let result = text;
+  // \\\[ ... \\\] (double-escaped display)
+  result = result.replace(/\\\\\[\s*([\s\S]*?)\s*\\\\\]/g, (_, inner) =>
+    `\n$$\n${unescapeDisplayBackslashes(inner.trim())}\n$$\n`
+  );
+  // \[ ... \] (display math)
+  result = result.replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, (_, inner) =>
+    `\n$$\n${inner.trim()}\n$$\n`
+  );
+  // \\( ... \\) (double-escaped inline)
+  result = result.replace(/\\\\\(\s*([\s\S]*?)\s*\\\\\)/g, (_, inner) =>
+    `$${unescapeDisplayBackslashes(inner.trim())}$`
+  );
+  // \( ... \) (inline math)
+  result = result.replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, (_, inner) =>
+    `$${inner.trim()}$`
+  );
+  return result;
+}
+
+function processPlainSegment(text: string): string {
+  return text.replace(/^(.+)$/gm, (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    if (!LATEX_CMD.test(trimmed)) return line;
+    if (/^\$\$[\s\S]*\$\$$/.test(trimmed)) return line;
+    if (/^\$[^$].*[^$]\$$/.test(trimmed)) return line;
+
+    const outsideInline = trimmed.replace(/\$[^$\n]+\$/g, '');
+    const hasNonMathWords = /[A-Za-zÀ-ÖØ-öø-ÿ]{4,}/.test(
+      outsideInline.replace(LATEX_CMD, '').replace(/[^A-Za-zÀ-ÖØ-öø-ÿ]/g, ' ').trim()
+    );
+
+    if (hasNonMathWords) {
+      return line.replace(
+        /(?<!\$)((?:[A-Za-z][A-Za-z0-9]*|[0-9]+)(?:[_^]\{[^}]*\}|[_^][A-Za-z0-9])+(?:\s*[+\-*/=]\s*(?:[A-Za-z0-9][A-Za-z0-9_^{}]*))*)(?!\$)/g,
+        (expr) => `$${expr.trim()}$`
+      );
+    }
+
+    const mathContent = trimmed
+      .replace(/^\$\$\s*/, '').replace(/\s*\$\$$/, '')
+      .replace(/\$([^$]+)\$/g, '$1')
+      .replace(/^\$/, '').replace(/\$$/, '')
+      .trim();
+    return `$$${mathContent}$$`;
+  });
+}
+
+function normalizeMathDelimiters(text: string): string {
+  // Protect escaped dollar signs
+  const escaped = text.replace(/\\\$/g, '\x00DOLLAR\x00');
+  // Convert \[ \] and \( \) style delimiters in the raw text before tokenizing
+  const preNorm = normalizeDelimitersInText(escaped);
+  // Tokenize into code/display/inline/text segments (no regex-split infinite loop possible)
+  const tokens = tokenize(preNorm);
+  const parts: string[] = [];
+
+  for (const tok of tokens) {
+    if (tok.type === 'code') {
+      parts.push(tok.content);
+    } else if (tok.type === 'display') {
+      // Ensure $$ delimiters are on their own lines for remark-math compatibility
+      parts.push(`\n$$\n${tok.content}\n$$\n`);
+    } else if (tok.type === 'inline') {
+      parts.push(`$${tok.content}$`);
+    } else {
+      parts.push(processPlainSegment(tok.content));
+    }
+  }
+
+  return parts.join('').replace(/\x00DOLLAR\x00/g, '\\$');
+}
+
+function preprocessMath(content: string): string {
+  return normalizeMathDelimiters(content);
 }
 
 function parseThinkingContent(content: string, isStreaming: boolean): { thinking: string | null; mainContent: string } {
@@ -53,7 +265,6 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showCustomTemplateOverlay, setShowCustomTemplateOverlay] = useState(false);
   
-  // Refs for positioning and click-outside detection
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
@@ -183,7 +394,11 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
     if (message.role !== 'assistant') {
       return { thinking: null, mainContent: message.content };
     }
-    return parseThinkingContent(message.content, isStreaming);
+    const parsed = parseThinkingContent(message.content, isStreaming);
+    return {
+      thinking: parsed.thinking,
+      mainContent: parsed.mainContent ? preprocessMath(parsed.mainContent) : parsed.mainContent,
+    };
   }, [message.content, message.role, isStreaming]);
 
   const getAssistantIcon = () => {
@@ -241,14 +456,14 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
                 </div>
               </div>
             ) : (
-              <div className="prose prose-sm max-w-full dark:prose-invert overflow-hidden" style={{ maxWidth: '100%' }}>
+              <div className="prose prose-base sm:prose-sm max-w-full dark:prose-invert overflow-hidden" style={{ maxWidth: '100%' }}>
                 {thinking && message.role === 'assistant' && (
                   <ThinkingBlock content={thinking} isStreaming={isStreaming && !mainContent} />
                 )}
                 {mainContent && (
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[rehypeRaw, [rehypeKatex, { throwOnError: false, strict: false, errorColor: 'inherit' }]]}
                   style={{ maxWidth: '100%', width: '100%' }}
                   components={{
                     center: ({ children }) => (<div className="text-center my-2">{children}</div>),
@@ -269,22 +484,39 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
                     code: ({ inline, children }) => {
                       if (inline) {
                         return (
-                          <code className={`px-1.5 py-0.5 rounded text-sm font-mono break-words hyphens-auto ${
+                          <code className={`px-1.5 py-0.5 rounded text-base sm:text-sm font-mono break-words hyphens-auto ${
                             message.role === 'user' ? 'bg-gray-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
                           }`}>{children}</code>
                         );
                       }
                       return <code className="font-mono">{children}</code>;
                     },
-                    h1: ({ children }) => (<h1 className="text-lg sm:text-xl font-bold mt-4 mb-3 break-words hyphens-auto">{children}</h1>),
-                    h2: ({ children }) => (<h2 className="text-base sm:text-lg font-semibold mt-3 mb-2 break-words hyphens-auto">{children}</h2>),
-                    h3: ({ children }) => (<h3 className="text-sm sm:text-base font-semibold mt-3 mb-2 break-words hyphens-auto">{children}</h3>),
-                    p: ({ children }) => (<p className="mb-2 break-words hyphens-auto leading-relaxed whitespace-pre-wrap">{children}</p>),
-                    ul: ({ children }) => (<ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>),
-                    ol: ({ children }) => (<ol className="list-decimal list-inside ml-4 mb-2 space-y-1">{children}</ol>),
-                    li: ({ children }) => (<li className="break-words hyphens-auto">{children}</li>),
-                    blockquote: ({ children }) => (<blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 italic text-gray-700 dark:text-gray-300 break-words hyphens-auto">{children}</blockquote>),
-                    a: ({ href, children }) => (<a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline break-words">{children}</a>),
+                    h1: ({ children }) => (<h1 className="text-xl sm:text-xl font-bold mt-4 mb-3 break-words hyphens-auto">{children}</h1>),
+                    h2: ({ children }) => (<h2 className="text-lg sm:text-lg font-semibold mt-3 mb-2 break-words hyphens-auto">{children}</h2>),
+                    h3: ({ children }) => (<h3 className="text-base sm:text-base font-semibold mt-3 mb-2 break-words hyphens-auto">{children}</h3>),
+                    p: ({ children }) => (<p className="text-base sm:text-sm mb-2 break-words hyphens-auto leading-relaxed whitespace-pre-wrap">{children}</p>),
+                    ul: ({ children }) => (<ul className="text-base sm:text-sm list-disc ml-4 mb-2 space-y-1">{children}</ul>),
+                    ol: ({ children }) => (<ol className="text-base sm:text-sm list-decimal list-inside ml-4 mb-2 space-y-1">{children}</ol>),
+                    li: ({ children }) => (<li className="text-base sm:text-sm break-words hyphens-auto">{children}</li>),
+                    blockquote: ({ children }) => (<blockquote className="text-base sm:text-sm border-l-4 border-gray-300 dark:border-gray-600 pl-4 my-4 italic text-gray-700 dark:text-gray-300 break-words hyphens-auto">{children}</blockquote>),
+                    a: ({ href, children }) => (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 hover:underline break-words"
+                        onClick={(e) => {
+                          if (href && Capacitor.isNativePlatform()) {
+                            e.preventDefault();
+                            window.dispatchEvent(new CustomEvent('openInBrowser', {
+                              detail: { url: href, title: '', description: '', favicon: '' },
+                            }));
+                          }
+                        }}
+                      >
+                        {children}
+                      </a>
+                    ),
                     strong: ({ children }) => (<strong className="font-semibold">{children}</strong>),
                     em: ({ children }) => (<em className="italic">{children}</em>),
                   }}

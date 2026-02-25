@@ -15,8 +15,10 @@ import { SplitChatOverlay } from '../UI/SplitChatOverlay';
 import { CSRFManager } from '../../utils/csrf';
 import { storage } from '../../utils/storage';
 import { setupKeyboardHandler, cleanupKeyboardHandler } from '../../utils/keyboardHandler';
-import { fetchProModels } from '../../utils/proModels';
-import { Briefcase, Sparkles } from 'lucide-react';
+import { fetchProModels, ImportantNotification } from '../../utils/proModels';
+import { Briefcase, Sparkles, X } from 'lucide-react';
+import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
  
 interface ChatProps {
   chat: ChatType;
@@ -34,11 +36,6 @@ interface ChatProps {
   isSidebarOpen?: boolean;
 }
 
-interface SearchBody {
-  query: string;
-  country?: string;
-  lang?: string;
-}
 
 export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstructions, expertInstructions, toneInstructions, workspaces, experts, onUpdateExperts, onDeleteExpert, onShowProOverlay, onToggleSidebar, isSidebarOpen }: ChatProps) {
   const { t, i18n } = useTranslation();
@@ -50,6 +47,7 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   const [searchKeywords, setSearchKeywords] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [isAssemblingResults, setIsAssemblingResults] = useState(false);
   const [chatFiles, setChatFiles] = useState<Record<string, string>>({});
   const [chatImages, setChatImages] = useState<Record<string, string>>({});
   const [currentChatTitle, setCurrentChatTitle] = useState(chat.title);
@@ -65,11 +63,13 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   const customIcon = SETUP_CONFIG.menu_icon ? SETUP_CONFIG.menu_icon : null;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const prevChatMessagesLength = useRef(chat.messages.length);
   const prevStreamingMessageId = useRef<string | null>(null); 
 
-  const abortControllerRef = useRef<AbortController | null>(null); 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const streamingSearchResultsRef = useRef<{ results: any; lastUserMsgIndex: number } | null>(null);
   
   const { files, saveFile } = useFiles();
   const { useCurrentDate } = useDateSetting();
@@ -92,7 +92,10 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
 
   const [showSplitOverlay, setShowSplitOverlay] = useState(false);
   const [splitMessageId, setSplitMessageId] = useState<string | null>(null);
-  
+
+  const [importantNotification, setImportantNotification] = useState<ImportantNotification | null>(null);
+  const [showImportantNotification, setShowImportantNotification] = useState(false);
+
   // Default sponsored content fallback
   const defaultSponsoredContent = [];
   //Example:
@@ -125,14 +128,6 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
       } catch (error) {
         console.error('Error parsing endpoint URL:', error);
       }
-    }
-    return modelEndpoint.authorization;
-  };
-
-  const getWebSearchAuthorizationHeader = (modelEndpoint: any): string => {
-    const proKey = localStorage.getItem('pro_key');
-    if (proKey) {
-      return `Bearer ${proKey}`;
     }
     return modelEndpoint.authorization;
   };
@@ -218,12 +213,9 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
         if (response.ok) {
           const data = await response.json();
           if (data && typeof data === 'object' && data.sponsored_content && Array.isArray(data.sponsored_content)) {
-            // Data structure is valid
             if (data.sponsored_content.length > 0) {
-              // Array has content, so we set it
               setSponsoredContent(data.sponsored_content);
             } else {
-              // API returned a valid, but empty, array. Use fallback.
               setSponsoredContent(defaultSponsoredContent);
             }
             
@@ -231,15 +223,12 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
               localStorage.setItem('sp_token', data.sponsored_token);
             }
           } else {
-            //Failed to fetch sponsored content, using fallback
             setSponsoredContent(defaultSponsoredContent);
           }
         } else {
-          //Failed to fetch sponsored content, using fallback
           setSponsoredContent(defaultSponsoredContent);
         }
       } catch (error) {
-        //Error fetching sponsored content
         setSponsoredContent(defaultSponsoredContent);
       } finally {
         setIsLoadingSponsoredContent(false);
@@ -308,12 +297,9 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
             if (response.ok) {
               const data = await response.json();
               if (data && typeof data === 'object' && data.sponsored_content && Array.isArray(data.sponsored_content)) {
-                // Data structure is valid
                 if (data.sponsored_content.length > 0) {
-                  // Array has content, so we set it
                   setSponsoredContent(data.sponsored_content);
                 } else {
-                  // API returned a valid, but empty, array. Use fallback.
                   setSponsoredContent(defaultSponsoredContent);
                 }
                 
@@ -321,7 +307,6 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
                   localStorage.setItem('sp_token', data.sponsored_token);
                 }
               } else {
-                //Failed to fetch sponsored content, using fallback
                 setSponsoredContent(defaultSponsoredContent);
               }
             } else {
@@ -356,7 +341,15 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
 
   useEffect(() => {
     const loadProModels = async () => {
-      const proModelsData = await fetchProModels();
+      let lang: string | undefined;
+      try {
+        const savedLanguage = await storage.settings.get('language');
+        lang = savedLanguage || navigator.language.split('-')[0];
+      } catch {
+        lang = navigator.language.split('-')[0];
+      }
+
+      const proModelsData = await fetchProModels(lang);
 
       if (proModelsData && proModelsData.extra_models) {
         const extraModels = proModelsData.extra_models;
@@ -395,6 +388,24 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
           };
 
           saveAISettings(updatedSettings);
+        }
+      }
+
+      if (proModelsData && proModelsData.important_notification) {
+        const notif = proModelsData.important_notification;
+        if (notif.title) {
+          try {
+            const storedVersionRaw = await storage.settings.get('important_notification');
+            const storedVersion = storedVersionRaw ? parseInt(storedVersionRaw, 10) : null;
+            if (storedVersion === null || notif.notification_version > storedVersion) {
+              setImportantNotification(notif);
+              setShowImportantNotification(true);
+              await storage.settings.set('important_notification', String(notif.notification_version));
+            }
+          } catch {
+            setImportantNotification(notif);
+            setShowImportantNotification(true);
+          }
         }
       }
     };
@@ -506,21 +517,32 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
 
   useEffect(() => {
     if (chat.messages.length > 0) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
-      }, 100);
+      const scrollToBottom = () => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      };
+      setTimeout(scrollToBottom, 50);
+      setTimeout(scrollToBottom, 300);
+      setTimeout(scrollToBottom, 800);
     }
   }, [chat.id]);
 
   useEffect(() => {
     const currentMessagesLength = chat.messages.length;
 
+    const scrollToBottom = () => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      }
+    };
+
     if (currentMessagesLength > prevChatMessagesLength.current && chat.messages[currentMessagesLength - 1]?.role === 'user') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom();
     }
 
     else if (streamingMessageId && streamingMessageId !== prevStreamingMessageId.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom();
     }
 
     prevChatMessagesLength.current = currentMessagesLength;
@@ -532,15 +554,15 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   const handleSendMessage = async (content: string, messageFiles: FileReference[] = [], messageImages: ImageReference[] = [], selectedModel: string, requestType: string = 'auto') => {
     setStreamingSponsoredContent([]);
     setShowSuggestedPremium(false);
-    
+
     const csrfManager = CSRFManager.getInstance();
     await csrfManager.refreshToken();
-    
+
     if (!content.trim()) return;
 
     const stored = localStorage.getItem('aiSettings');
     let currentAISettings = aiSettings;
-    
+
     if (stored) {
       try {
         currentAISettings = JSON.parse(stored);
@@ -559,8 +581,7 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
     }
 
     const isSafeWebSearchEnabled = modelEndpoint.enableSafeWebSearch || false;
-    
-    // Get safeWebSearchActive from storage.settings (same as ChatInput.tsx)
+
     let safeWebSearchActive = false;
     try {
       const storedSafeWebSearch = await storage.settings.get('safeWebSearchActive');
@@ -569,7 +590,6 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
       console.error('Error loading safeWebSearchActive:', error);
     }
 
-    // Check if there are any attachments (files or images)
     messageFiles.forEach(file => {
       const fileKey = `${chat.id}_file_${file.name}`;
       saveFile(fileKey, file.content);
@@ -590,7 +610,7 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
     };
 
     const updatedMessages = [...chat.messages, userMessage];
-    
+
     let updatedChat = {
       ...chat,
       messages: updatedMessages,
@@ -609,8 +629,8 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
     onUpdateChat(updatedChat);
 
     let hasMentionedAttachments = false;
-    const mentions = content.match(/@(\w+)/g); // Finds all words prefixed with @ (mentions)
-    
+    const mentions = content.match(/@(\w+)/g);
+
     if (mentions) {
       for (const mention of mentions) {
         const itemName = mention.substring(1);
@@ -620,154 +640,45 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
         }
       }
     }
-    
-    if (isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments) {
-      await handleSafeWebSearch(updatedMessages, userMessage, selectedModel, modelEndpoint, updatedChat);
-    } else {
-      await handleRegularMessage(updatedMessages, selectedModel, modelEndpoint, 'auto', updatedChat);
-    }
+
+    const useWeb = isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments;
+    await handleRegularMessage(updatedMessages, selectedModel, modelEndpoint, 'auto', updatedChat, useWeb);
   };
   
-const handleSafeWebSearch = async (
-    updatedMessages: Message[],
-    userMessage: Message,
-    selectedModel: string,
-    modelEndpoint: any,
-    updatedChat: ChatType
-  ) => {
-    setIsLoading(true);
-    setIsSearching(true);
-    setSearchKeywords('');
-    
-    abortControllerRef.current = new AbortController(); 
-    const signal = abortControllerRef.current.signal; 
-
-    try {
-      const csrfManager = CSRFManager.getInstance();
-      const csrfHeaders = await csrfManager.getCSRFHeaders();
-
-      const currentDate = new Date().toLocaleDateString('de-DE');
-      const keywordMessages: APIMessage[] = [
-        {
-          role: 'system',
-          content: `Analyse this chat conversation and check what the user wants in the last chatmessage. Then turn the users request into a single google keyword so that it can be entered into a search engine and get an appropriate answer to the users request. For example output a good keyword like \'longest bridge in germany\' if the user asks about whats the longest bridge in germany. Only output the keyword and don\'t answer questions. Today's current date is ${currentDate}`
-        },
-        ...updatedMessages
-      ];
-
-      const keywordRequest = { messages: keywordMessages, model: selectedModel, temperature: 0.1, stream: false };
-
-      const keywordResponse = await fetch(modelEndpoint.url, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': getAIAuthorizationHeader(modelEndpoint),
-          ...csrfHeaders
-        },
-        body: JSON.stringify(keywordRequest),
-        signal: signal
-      });
-
-      if (!keywordResponse.ok) throw new Error('Failed to extract keywords');
-      const keywordData = await keywordResponse.json();
-      const keywords = keywordData.choices?.[0]?.message?.content?.trim() || '';
-      if (keywords===''){
-        setIsSearching(false); 
-        await handleRegularMessage(updatedMessages, selectedModel, modelEndpoint, 'auto', updatedChat);
-        return;
-      }
-      if (!keywords) throw new Error('No keywords extracted');
-      setSearchKeywords(keywords);
-
-      const bodyWebSearch: SearchBody = {
-        query: keywords,
-      };
-      if (SETUP_CONFIG.webSearch.country) {
-        bodyWebSearch.country = SETUP_CONFIG.webSearch.country;
-      }
-      if (SETUP_CONFIG.webSearch.add_lang) {
-        bodyWebSearch.lang = languageToUse;
-      }
-      const requestBodyWebSearch = JSON.stringify(bodyWebSearch);
-      
-       const serpResponse = await fetch(SETUP_CONFIG.webSearch.endpoint, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': SETUP_CONFIG.webSearch.authorization
-          ? SETUP_CONFIG.webSearch.authorization
-          : getWebSearchAuthorizationHeader(modelEndpoint),
-        ...csrfHeaders
-        },
-        body: requestBodyWebSearch,
-        signal: signal
-      });
-
-      if (!serpResponse.ok) throw new Error('SERP API request failed');
-      const serpData = await serpResponse.json();
-      if (!serpData.success) throw new Error('SERP search failed');
-      setSearchResults(serpData);
-      setIsSearching(false);
-
-      const userMessageWithSearch: Message = { ...userMessage, searchResults: serpData };
-      const updatedMessagesWithSearch = [...updatedMessages.slice(0, -1), userMessageWithSearch];
-      const chatWithSearch = { ...updatedChat, messages: updatedMessagesWithSearch, updatedAt: new Date() };
-      
-      onUpdateChat(chatWithSearch);
-
-      const options: Intl.DateTimeFormatOptions = {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      };
-      const currentDateSearch = new Date().toLocaleDateString('en-GB', options);
-
-      const enhancedContent = `${userMessage.content}\n\n---> Search Results (Up-To-Date as of ${currentDateSearch}):\n${serpData.content}`;
-
-      await handleRegularMessageWithContent(
-        updatedMessagesWithSearch.slice(0, -1),
-        enhancedContent,
-        userMessage.files || [],
-        userMessage.images || [],
-        selectedModel,
-        modelEndpoint,
-        chatWithSearch
-      );
-      
-    } catch (error) {
-      console.error('Safe web search error:', error);
-      setIsSearching(false);
-      if (!(error instanceof DOMException && error.name === 'AbortError')) { 
-        await handleRegularMessage(updatedMessages, selectedModel, modelEndpoint, 'auto', updatedChat);
-      }
-    } finally {
-      abortControllerRef.current = null;
-    } 
-  };
 
   const handleRegularMessage = async (
     updatedMessages: Message[],
     selectedModel: string,
     modelEndpoint: any,
     requestType: string,
-    updatedChat: ChatType
+    updatedChat: ChatType,
+    useWeb: boolean = false
   ) => {
     const shouldIncludeRequestType = modelEndpoint.enableWebSearch || false;
     const finalRequestType = shouldIncludeRequestType ? requestType : undefined;
-    
+
     setIsLoading(true);
+    setIsAssemblingResults(false);
+    streamingSearchResultsRef.current = null;
+    if (useWeb) {
+      setIsSearching(true);
+      setSearchKeywords('');
+      setSearchResults(null);
+    }
     const apiMessages: APIMessage[] = [];
-    
+
     const systemParts = [];
 
-    if (useCurrentDate) {
-      const today = new Date();
-      const day = today.toLocaleDateString('en-GB', { day: '2-digit' });
-      const month = today.toLocaleDateString('en-US', { month: 'long' });
-      const year = today.getFullYear();
+    //systemParts.push('When writing mathematical expressions, always use LaTeX notation with proper delimiters: use \\( ... \\) for inline math and \\[ ... \\] for block/display math. For example: \\( a_n = ar^{n} \\) or \\[ S = \\sum_{n=0}^{\\infty} ar^n = \\frac{a}{1-r} \\]');
 
-      const currentDate = `${day}. ${month} ${year}`;
-      systemParts.push(`Today is ${currentDate}`);
+    if (useCurrentDate) {
+     const today = new Date();
+     const day = String(today.getDate()).padStart(2, '0');
+     const month = String(today.getMonth() + 1).padStart(2, '0');
+     const year = today.getFullYear();
+    
+     const currentDate = `${day}.${month}.${year}`; 
+     systemParts.push(`Today is ${currentDate}`);
     }
 
     if (workspaceInstructions) {
@@ -836,6 +747,7 @@ const handleSafeWebSearch = async (
       ...(finalRequestType && { request_type: finalRequestType }),
       ...(SETUP_CONFIG.add_ads_token && { ads_token: adsToken }),
       ...(SETUP_CONFIG.add_chat_language && { chat_language: languageToUse }),
+      use_web: useWeb ? 'on' : 'off',
     };
 
     const chatTemperature = chat.temperature ?? 0.2;
@@ -848,11 +760,14 @@ const handleSafeWebSearch = async (
     setStreamingMessage('');
     streamingMessageRef.current = '';
 
-    abortControllerRef.current = new AbortController(); 
-    const signal = abortControllerRef.current.signal; 
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-    await sendChatMessage(apiRequest,
+    await sendChatMessage(
+      apiRequest,
       (chunk) => {
+        setIsSearching(false);
+        setIsAssemblingResults(false);
         streamingMessageRef.current += chunk;
         setStreamingMessage(prev => prev + chunk);
       },
@@ -861,6 +776,8 @@ const handleSafeWebSearch = async (
       (ads) => setStreamingSponsoredContent(ads),
       (error) => {
         setIsLoading(false);
+        setIsSearching(false);
+        setIsAssemblingResults(false);
         setStreamingMessage('');
         setStreamingMessageId(null);
         streamingMessageRef.current = '';
@@ -874,155 +791,63 @@ const handleSafeWebSearch = async (
       },
       () => {
         setIsLoading(false);
+        setIsSearching(false);
+        setIsAssemblingResults(false);
         const finalContent = streamingMessageRef.current;
         if (finalContent && finalContent.trim()) {
           const assistantMessage: Message = { id: streamingId, content: finalContent, role: 'assistant', timestamp: new Date() };
-          const finalUpdatedChat = { ...updatedChat, messages: [...updatedMessages, assistantMessage], updatedAt: new Date() };
+          let baseMessages = updatedMessages;
+          const searchRef = streamingSearchResultsRef.current;
+          if (searchRef && searchRef.lastUserMsgIndex !== -1) {
+            const userMsg = updatedMessages[searchRef.lastUserMsgIndex];
+            baseMessages = [
+              ...updatedMessages.slice(0, searchRef.lastUserMsgIndex),
+              { ...userMsg, searchResults: searchRef.results },
+              ...updatedMessages.slice(searchRef.lastUserMsgIndex + 1)
+            ];
+          }
+          const finalUpdatedChat = { ...updatedChat, messages: [...baseMessages, assistantMessage], updatedAt: new Date() };
           setStreamingMessage('');
           streamingMessageRef.current = '';
           setStreamingMessageId(null);
+          streamingSearchResultsRef.current = null;
           onUpdateChat(finalUpdatedChat);
         } else {
           setStreamingMessage('');
           streamingMessageRef.current = '';
           setStreamingMessageId(null);
+          streamingSearchResultsRef.current = null;
         }
         abortControllerRef.current = null;
       },
       signal,
-      t
-    );
-  };
-  
-
-  const handleRegularMessageWithContent = async (
-    previousMessages: Message[],
-    enhancedContent: string,
-    messageFiles: FileReference[],
-    messageImages: ImageReference[],
-    selectedModel: string,
-    modelEndpoint: any,
-    chatWithSearchResults: ChatType
-  ) => {
-    const enhancedUserMessage: Message = { id: Date.now().toString(), content: enhancedContent, role: 'user', timestamp: new Date(), files: messageFiles, images: messageImages };
-    const messagesForAPI = [...previousMessages, enhancedUserMessage];
-    const apiMessages: APIMessage[] = [];
-    
-    const systemParts = [];
-
-    if (useCurrentDate) {
-      const today = new Date();
-      const day = today.toLocaleDateString('en-GB', { day: '2-digit' });
-      const month = today.toLocaleDateString('en-US', { month: 'long' });
-      const year = today.getFullYear();
-
-      const currentDate = `${day}. ${month} ${year}`;
-      systemParts.push(`Today is ${currentDate}`);
-    }
-
-    if (workspaceInstructions) {
-      systemParts.push(workspaceInstructions);
-    }
-
-    if (expertInstructions) {
-      systemParts.push(expertInstructions);
-    }
-
-    if (toneInstructions && !expertInstructions) {
-      systemParts.push(toneInstructions);
-    }
-
-    if (chatWithSearchResults.systemPrompt) {
-      systemParts.push(chatWithSearchResults.systemPrompt);
-    }
-
-    const systemPrompt = systemParts.join('\n\n');
-    if (systemPrompt) apiMessages.push({ role: 'system', content: systemPrompt });
-
-    messagesForAPI.forEach(msg => {
-      if (msg.role === 'user') {
-        let processedContent = msg.content;
-        const mentions = msg.content.match(/@(\w+)/g);
-        if (mentions) {
-          let appendContent = '';
-          mentions.forEach(mention => {
-            const itemName = mention.slice(1);
-            const fileKey = `${chatWithSearchResults.id}_file_${itemName}`;
-            const fileContent = files[fileKey];
-            if (fileContent) appendContent += `\n\n${itemName} (file):\n${fileContent}`;
-          });
-          if (appendContent) processedContent += appendContent;
-        }
-
-        const hasAttachedImages = msg.images && msg.images.length > 0;
-        const mentionedImageNames = mentions?.map(m => m.slice(1)).filter(name => availableImages[name]) || [];
-        const hasImages = hasAttachedImages || mentionedImageNames.length > 0;
-
-        if (hasImages) {
-          const contentArray: Array<{ type: 'text' | 'image_url'; text?: string; image_url?: { url: string }; }> = [{ type: 'text', text: processedContent }];
-          if (msg.images) msg.images.forEach(image => contentArray.push({ type: 'image_url', image_url: { url: image.content } }));
-          mentionedImageNames.forEach(imageName => {
-            const imageRef = availableImages[imageName];
-            if (imageRef) contentArray.push({ type: 'image_url', image_url: { url: imageRef.content } });
-          });
-          apiMessages.push({ role: msg.role, content: contentArray });
-        } else {
-          apiMessages.push({ role: msg.role, content: processedContent });
-        }
-      } else {
-        apiMessages.push({ role: msg.role, content: msg.content });
-      }
-    });
-
-    const apiRequest: any = { messages: apiMessages, model: selectedModel, temperature: chatWithSearchResults.temperature ?? 0.2, endpoint: modelEndpoint.url, authorization: modelEndpoint.authorization, ...(SETUP_CONFIG.add_ads_token && { ads_token: adsToken }), ...(SETUP_CONFIG.add_chat_language && { chat_language: languageToUse })};
-    const streamingId = (Date.now() + 1).toString();
-    setStreamingMessageId(streamingId);
-    setStreamingMessage('');
-    streamingMessageRef.current = '';
-
-    abortControllerRef.current = new AbortController(); 
-    const signal = abortControllerRef.current.signal; 
-
-    await sendChatMessage(apiRequest,
-      (chunk) => {
-        streamingMessageRef.current += chunk;
-        setStreamingMessage(prev => prev + chunk);
-      },
-      (adstoken) => setAdsToken(adstoken),
-      (adstitle) => setStreamingSponsoredContentTitle(adstitle),
-      (ads) => setStreamingSponsoredContent(ads),
-      (error) => { 
-        setIsLoading(false);
-        setStreamingMessage('');
-        streamingMessageRef.current = '';
-        setStreamingMessageId(null);
-        setStreamingSponsoredContent([]);
-
-        console.error("An error occurred:", error);
-
-        const errorMessage: Message = { id: streamingId, content: t('errorTryAgain'), role: 'assistant', timestamp: new Date(), isError: true };
-
-        onUpdateChat({ ...chatWithSearchResults, messages: [...chatWithSearchResults.messages, errorMessage], updatedAt: new Date() });
-      },
+      t,
       () => {
-        setIsLoading(false);
-        const finalContent = streamingMessageRef.current;
-        if (finalContent && finalContent.trim()) {
-          const assistantMessage: Message = { id: streamingId, content: finalContent, role: 'assistant', timestamp: new Date() };
-          const finalUpdatedChat = { ...chatWithSearchResults, messages: [...chatWithSearchResults.messages, assistantMessage], updatedAt: new Date() };
-          setStreamingMessage('');
-          streamingMessageRef.current = '';
-          setStreamingMessageId(null);
-          onUpdateChat(finalUpdatedChat);
-        } else {
-          setStreamingMessage('');
-          streamingMessageRef.current = '';
-          setStreamingMessageId(null);
-        }
-        abortControllerRef.current = null;
+        setIsSearching(false);
+        setIsAssemblingResults(true);
       },
-      signal,
-      t
+      (results) => {
+        setIsSearching(false);
+        setIsAssemblingResults(false);
+        const serpData: SearchResults = {
+          success: true,
+          content: '',
+          serp: results
+        };
+        setSearchResults(serpData);
+        const lastUserMsgIndex = updatedMessages.map(m => m.role).lastIndexOf('user');
+        streamingSearchResultsRef.current = { results: serpData, lastUserMsgIndex };
+        if (lastUserMsgIndex !== -1) {
+          const userMsg = updatedMessages[lastUserMsgIndex];
+          const updatedMessagesWithSearch = [
+            ...updatedMessages.slice(0, lastUserMsgIndex),
+            { ...userMsg, searchResults: serpData },
+            ...updatedMessages.slice(lastUserMsgIndex + 1)
+          ];
+          const chatWithSearch = { ...updatedChat, messages: updatedMessagesWithSearch, updatedAt: new Date() };
+          onUpdateChat(chatWithSearch);
+        }
+      }
     );
   };
 
@@ -1051,16 +876,18 @@ const handleSafeWebSearch = async (
     setIsLoading(true);
     
     const apiMessages: APIMessage[] = [];
-    
+
     const systemParts = [];
+
+    //systemParts.push('When writing mathematical expressions, always use LaTeX notation with proper delimiters: use \\( ... \\) for inline math and \\[ ... \\] for block/display math. For example: \\( a_n = ar^{n} \\) or \\[ S = \\sum_{n=0}^{\\infty} ar^n = \\frac{a}{1-r} \\]');
 
     if (useCurrentDate) {
       const today = new Date();
-      const day = today.toLocaleDateString('en-GB', { day: '2-digit' });
-      const month = today.toLocaleDateString('en-US', { month: 'long' });
+      const day = String(today.getDate()).padStart(2, '0');
+      const month = String(today.getMonth() + 1).padStart(2, '0');
       const year = today.getFullYear();
-
-      const currentDate = `${day}. ${month} ${year}`;
+      
+      const currentDate = `${day}.${month}.${year}`;
       systemParts.push(`Today is ${currentDate}`);
     }
 
@@ -1127,6 +954,7 @@ const handleSafeWebSearch = async (
       ...(finalRequestType && { request_type: finalRequestType }),
       ...(SETUP_CONFIG.add_ads_token && { ads_token: adsToken }),
       ...(SETUP_CONFIG.add_chat_language && { chat_language: languageToUse }),
+      use_web: 'off',
     };
 
     const streamingId = (Date.now() + 1).toString();
@@ -1134,19 +962,18 @@ const handleSafeWebSearch = async (
     setStreamingMessage('');
     streamingMessageRef.current = '';
 
-    abortControllerRef.current = new AbortController(); 
-    const signal = abortControllerRef.current.signal; 
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
-    await sendChatMessage(apiRequest,
+    await sendChatMessage(
+      apiRequest,
       (chunk) => {
         streamingMessageRef.current += chunk;
         setStreamingMessage(prev => prev + chunk);
       },
-      (adstoken) => { setAdsToken(adstoken) },
-      (sponsoredAdsTitle) => { setStreamingSponsoredContentTitle(sponsoredAdsTitle) },
-      (sponsoredAds) => {
-        setStreamingSponsoredContent(sponsoredAds);
-      },
+      (adstoken) => { setAdsToken(adstoken); },
+      (sponsoredAdsTitle) => { setStreamingSponsoredContentTitle(sponsoredAdsTitle); },
+      (sponsoredAds) => { setStreamingSponsoredContent(sponsoredAds); },
       (error) => {
         setIsLoading(false);
         setStreamingMessage('');
@@ -1228,57 +1055,30 @@ const handleSafeWebSearch = async (
       if (stored) { try { currentAISettings = JSON.parse(stored); } catch (error) { console.error('Error parsing stored AI settings:', error); } }
       const modelEndpoint = currentAISettings.endpoints.find(endpoint => endpoint.models.includes(aiSettings.selectedModel));
       const isSafeWebSearchEnabled = modelEndpoint?.enableSafeWebSearch || false;
-      const isWebSearchEnabled = modelEndpoint?.enableWebSearch || false;
 
-      // Check if the edited message has attachments
-      const hasAttachments = (originalMessage.files && originalMessage.files.length > 0) || 
-                            (originalMessage.images && originalMessage.images.length > 0);
       setTimeout(async () => {
-        // Get the current request type setting for web search
-        let requestType = 'auto';
         let safeWebSearchActive = false;
-        
         try {
           const storedSafeWebSearch = await storage.settings.get('safeWebSearchActive');
           safeWebSearchActive = storedSafeWebSearch === 'true';
         } catch (error) {
           console.error('Error loading safeWebSearchActive:', error);
         }
-        
-        if (isWebSearchEnabled && !isSafeWebSearchEnabled) {
-          try {
-            const storedRequestType = await storage.settings.get('requestType');
-            requestType = storedRequestType || 'auto';
-          } catch (error) {
-            console.error('Error loading requestType:', error);
-          }
-        }
 
         let hasMentionedAttachments = false;
-        const mentions = newContent.match(/@(\w+)/g); // Finds all words prefixed with @ (mentions)
-        
+        const mentions = newContent.match(/@(\w+)/g);
         if (mentions) {
           for (const mention of mentions) {
             const itemName = mention.substring(1);
             if (availableFiles[itemName] || availableImages[itemName]) {
               hasMentionedAttachments = true;
-              break; // Found at least one valid mention, no need to check further
+              break;
             }
           }
         }
-        
-        if (isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments) {
-          handleSafeWebSearch(newMessagesArray, editedMessage, aiSettings.selectedModel, modelEndpoint, updatedChat);
-        } else {
-          handleSendMessageIsolated(
-            newMessagesArray, 
-            newContent.trim(), 
-            originalMessage.files || [],
-            originalMessage.images || [], 
-            aiSettings.selectedModel, 
-            requestType
-          );
-        }
+
+        const useWeb = isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments;
+        handleRegularMessage(newMessagesArray, aiSettings.selectedModel, modelEndpoint, 'auto', updatedChat, useWeb);
       }, 50);
     }
   };
@@ -1304,34 +1104,14 @@ const handleSafeWebSearch = async (
     onUpdateChat(updatedChat);
 
     setTimeout(async () => {
-      // Get the current request type setting for web search
-      let requestType = 'auto';
       const stored = localStorage.getItem('aiSettings');
       let currentAISettings = aiSettings;
-      if (stored) { 
-        try { 
-          currentAISettings = JSON.parse(stored); 
-        } catch (error) { 
-          console.error('Error parsing stored AI settings:', error); 
-        } 
+      if (stored) {
+        try { currentAISettings = JSON.parse(stored); } catch (error) { console.error('Error parsing stored AI settings:', error); }
       }
       const modelEndpoint = currentAISettings.endpoints.find(endpoint => endpoint.models.includes(aiSettings.selectedModel));
-      const isWebSearchEnabled = modelEndpoint?.enableWebSearch || false;
       const isSafeWebSearchEnabled = modelEndpoint?.enableSafeWebSearch || false;
-      
-      // Check if the user message has attachments
-      const hasAttachments = (userMessage.files && userMessage.files.length > 0) || 
-                            (userMessage.images && userMessage.images.length > 0);
-      
-      if (isWebSearchEnabled && !isSafeWebSearchEnabled) {
-        try {
-          const storedRequestType = await storage.settings.get('requestType');
-          requestType = storedRequestType || 'auto';
-        } catch (error) {
-          console.error('Error loading requestType:', error);
-        }
-      }
-      
+
       let safeWebSearchActive = false;
       if (isSafeWebSearchEnabled) {
         try {
@@ -1341,32 +1121,21 @@ const handleSafeWebSearch = async (
           console.error('Error loading safeWebSearchActive:', error);
         }
       }
-      
+
       let hasMentionedAttachments = false;
-      const mentions = userMessage.content.match(/@(\w+)/g); // Finds all words prefixed with @ (mentions)
-      
+      const mentions = userMessage.content.match(/@(\w+)/g);
       if (mentions) {
         for (const mention of mentions) {
           const itemName = mention.substring(1);
           if (availableFiles[itemName] || availableImages[itemName]) {
             hasMentionedAttachments = true;
-            break; // Found at least one valid mention, no need to check further
+            break;
           }
         }
       }
-      
-      if (isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments) {
-        handleSafeWebSearch(newMessagesArray, userMessage, aiSettings.selectedModel, modelEndpoint, updatedChat);
-      } else {
-        handleSendMessageIsolated(
-          newMessagesArray, 
-          userMessage.content, 
-          userMessage.files || [],
-          userMessage.images || [], 
-          aiSettings.selectedModel, 
-          requestType
-        );
-      }
+
+      const useWeb = isSafeWebSearchEnabled && safeWebSearchActive && !hasMentionedAttachments;
+      handleRegularMessage(newMessagesArray, aiSettings.selectedModel, modelEndpoint, 'auto', updatedChat, useWeb);
     }, 50);
   };
 
@@ -1568,8 +1337,98 @@ const handleSafeWebSearch = async (
         onUpdateChat={onUpdateChat}
       />
 
-      <div className="flex-1 overflow-hidden relative">
-        <div className="h-full overflow-y-auto" style={{
+      {showImportantNotification && importantNotification && (
+        <div className="relative z-20 pt-2 flex justify-center">
+          <div
+            className="relative overflow-hidden rounded-2xl border border-white/20 dark:border-white/10 w-[calc(100%-20px)] max-w-[500px]"
+            style={{
+              background: 'rgba(255,255,255,0.55)',
+              backdropFilter: 'blur(24px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)',
+            }}
+          >
+            <div
+              className="absolute inset-0 rounded-2xl pointer-events-none"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.05) 100%)',
+              }}
+            />
+            <div className="dark:hidden absolute inset-0 rounded-2xl pointer-events-none"
+              style={{
+                background: 'rgba(255,255,255,0.55)',
+                backdropFilter: 'blur(24px) saturate(180%)',
+              }}
+            />
+            <div
+              className="hidden dark:block absolute inset-0 rounded-2xl pointer-events-none"
+              style={{
+                background: 'rgba(30,30,35,0.55)',
+                backdropFilter: 'blur(24px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08)',
+              }}
+            />
+            
+            <div className="relative flex items-start min-[500px]:items-center justify-between gap-3 px-4 py-3">
+              
+              <div className="flex-1 min-w-0 flex flex-col min-[500px]:flex-row min-[500px]:items-center gap-2 min-[500px]:gap-3">
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">
+                    {importantNotification.title}
+                  </p>
+                  {importantNotification.subtitle && (
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 leading-snug">
+                      {importantNotification.subtitle}
+                    </p>
+                  )}
+                </div>
+
+                {importantNotification.button_text && importantNotification.button_link && (
+                  <div className="flex-shrink-0 mt-1 min-[500px]:mt-0">
+                    <button
+                      onClick={async () => {
+                        const url = importantNotification.button_link!;
+                        setShowImportantNotification(false);
+                        if (Capacitor.isNativePlatform()) {
+                          await Browser.open({ url });
+                        } else {
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        }
+                      }}
+                      className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-semibold text-white transition-opacity hover:opacity-80 active:opacity-70"
+                      style={{
+                        background: 'linear-gradient(135deg, #1a1a1a 0%, #333 100%)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}
+                    >
+                      {importantNotification.button_text}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0 mt-0.5 min-[500px]:mt-0">
+                {importantNotification.button_text && importantNotification.button_link && (
+                  <div className="hidden min-[500px]:block w-px h-5 bg-gray-300 dark:bg-gray-600" />
+                )}
+                <button
+                  onClick={() => setShowImportantNotification(false)}
+                  className="flex items-center justify-center w-7 h-7 min-w-[1.75rem] min-h-[1.75rem] aspect-square flex-shrink-0 rounded-full transition-colors hover:bg-black/10 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"
+                  aria-label="Close notification"
+                >
+                  <X size={14} className="flex-shrink-0" />
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-hidden relative min-h-0">
+        <div ref={scrollContainerRef} className="h-full overflow-y-auto" style={{
           WebkitOverflowScrolling: 'touch',
           paddingBottom: 'calc(220px + env(safe-area-inset-bottom))'
         }}>
@@ -1681,6 +1540,7 @@ const handleSafeWebSearch = async (
                 searchKeywords={searchKeywords}
                 searchResults={searchResults}
                 isSearching={isSearching}
+                isAssemblingResults={isAssemblingResults}
                 messagesEndRef={messagesEndRef}
               />
               </div>

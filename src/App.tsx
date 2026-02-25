@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import Chat from './components/Chat/Chat';
 import { EditWorkspaceModal } from './components/Sidebar/EditWorkspaceModal';
@@ -36,6 +37,8 @@ function App() {
   const [modalChats, setModalChats] = useState<ChatType[]>([]);
   const [showProOverlay, setShowProOverlay] = useState(false);
 
+  const isNative = Capacitor.isNativePlatform();
+
   const setCustomAssistantIcon = (imageUrl: string) => {
     localStorage.setItem('assistantIcon', imageUrl);
     window.dispatchEvent(new Event('storage'));
@@ -72,12 +75,7 @@ function App() {
   }, [chats, isLoaded]);
 
   useEffect(() => {
-    //console.log('Auto-create effect - isLoaded:', isLoaded, 'chats.length:', chats.length, 'selectedChatId:', selectedChatId);
-    
-    if (!isLoaded) {
-      //console.log('Waiting for chats to load...');
-      return;
-    }
+    if (!isLoaded) return;
 
     if (selectedChatId === null && !tempChat) {
       handleNewChat();
@@ -238,7 +236,9 @@ function App() {
     }
   }, [theme]);
 
-  const selectedChat = chats.find(chat => chat.id === selectedChatId) || 
+
+
+  const selectedChat = chats.find(chat => chat.id === selectedChatId) ||
                       (tempChat && tempChat.id === selectedChatId ? tempChat : null);
 
   const handleNewChat = (workspaceId?: string, expertId?: string) => {
@@ -510,7 +510,7 @@ function App() {
 
       <div className="flex-1 flex flex-col lg:ml-0 overflow-hidden">
         {(selectedChat || tempChat) ? (
-          <div className="w-full max-w-full overflow-hidden">
+          <div className="w-full h-full max-w-full overflow-hidden flex flex-col">
             <Chat
               chat={selectedChat || tempChat!}
               onUpdateChat={handleUpdateChat}
@@ -583,7 +583,7 @@ function App() {
       />
 
       <ConsentBanner />
-      
+
       <ProOverlay
         isOpen={showProOverlay}
         onClose={() => setShowProOverlay(false)}

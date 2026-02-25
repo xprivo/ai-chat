@@ -26,6 +26,7 @@ interface MessageListProps {
   searchKeywords: string;
   searchResults: SearchResults | null;
   isSearching: boolean;
+  isAssemblingResults: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement>;
 }
 
@@ -46,12 +47,13 @@ export function MessageList({
   searchKeywords,
   searchResults,
   isSearching,
+  isAssemblingResults,
   messagesEndRef
 }: MessageListProps) {
   const { t } = useTranslation();
 
   return (
-     <div className="flex-1 overflow-auto p-2 sm:p-3 w-full max-w-[700px] mx-auto">
+     <div className="p-2 sm:p-3 w-full max-w-[700px] mx-auto">
       {messages.map((message) => (
         <div key={message.id}>
           <MessageBubble
@@ -62,7 +64,6 @@ export function MessageList({
             onSplit={onSplitMessage}
             isStreaming={!!streamingMessageId && message.id === streamingMessageId}
           />
-          {/* Show search results for this specific message */}
           {message.searchResults && message.role === 'user' && (
             <div className="mt-2">
               <SearchResultsDisplay searchResults={message.searchResults} />
@@ -128,20 +129,62 @@ export function MessageList({
               <AssistantIcon size={16} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="inline-block p-3 sm:p-4 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
-                <div className="break-words">
+              <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50">
+                <svg className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
                   {searchKeywords
-                    ? <> {t('lookingUp')} {searchKeywords} </>
+                    ? <>{t('lookingUp')} <span className="font-semibold">{searchKeywords}</span></>
                     : t('searchRelevantInfo')
                   }
-                </div>
+                </span>
+                <span className="flex items-center gap-0.5 ml-1">
+                  <span className="w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-blue-500 dark:bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {isLoading && !streamingMessage && !isSearching && (
+      {isAssemblingResults && (
+        <div>
+          <div className="block sm:hidden mb-2">
+            <div className="flex justify-start">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center bg-gray-600 text-white">
+                <AssistantIcon size={14} />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <div className="hidden sm:flex w-8 h-8 rounded-full items-center justify-center flex-shrink-0 bg-gray-600 text-white">
+              <AssistantIcon size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="inline-flex items-center gap-2 p-3 sm:p-4 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-100 dark:border-teal-900/50">
+                <svg className="w-4 h-4 text-teal-500 dark:text-teal-400 flex-shrink-0 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm text-teal-700 dark:text-teal-300 font-medium">
+                  {t('search_assembling_results')}
+                </span>
+                <span className="flex items-center gap-0.5 ml-1">
+                  <span className="w-1 h-1 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1 h-1 rounded-full bg-teal-500 dark:bg-teal-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading && !streamingMessage && !isSearching && !isAssemblingResults && (
         <div>
           <div className="block sm:hidden mb-2">
             <div className="flex justify-start">

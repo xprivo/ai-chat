@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, lazy, Suspense } from 'react';
-import { Send, Paperclip, Loader2, X, Sparkles, Globe, Globe as GlobeOff, ChevronUp, Check, ArrowUp, Image, Zap, Cpu, Sparkle, Brain } from 'lucide-react';
+import { Send, Paperclip, Loader2, X, Sparkles, Globe, Globe as GlobeOff, ChevronUp, Check, ArrowUp, Image, Zap, Cpu, Sparkle, Brain, Plus, Settings2 } from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useAISettings } from '../../hooks/useLocalStorage';
 import { FileReference, ImageReference, AISettings } from '../../types';
@@ -8,10 +8,25 @@ import { Portal } from '../UI/Portal';
 import { ModelSelector } from './ModelSelector';
 import { storage } from '../../utils/storage';
 import { Capacitor } from '@capacitor/core';
+import { AIConsentOverlay, useAIConsent } from '../UI/AIConsentOverlay';
  
 // Lazy load heavy components with their dependencies
-const LazyFileProcessor = lazy(() => import('../FileUpload/FileProcessor').then(module => ({ default: module.FileProcessor })));
-const LazyPhotoUpload = lazy(() => import('../FileUpload/PhotoUpload').then(module => ({ default: module.PhotoUpload })));
+const fileProcessorImport = () => import('../FileUpload/FileProcessor').then(module => ({ default: module.FileProcessor }));
+const photoUploadImport = () => import('../FileUpload/PhotoUpload').then(module => ({ default: module.PhotoUpload }));
+const LazyFileProcessor = lazy(fileProcessorImport);
+const LazyPhotoUpload = lazy(photoUploadImport);
+
+const preloadComponents = () => {
+  fileProcessorImport();
+  photoUploadImport();
+};
+
+let pendingDroppedFile: File | null = null;
+export const getPendingDroppedFile = () => {
+  const file = pendingDroppedFile;
+  pendingDroppedFile = null;
+  return file;
+};
  
 interface ChatInputProps {
   onSendMessage: (content: string, files: FileReference[], images: ImageReference[], model: string, requestType: string) => void;
@@ -60,7 +75,19 @@ export function ChatInput({
 
   const [requestType, setRequestType] = useState<RequestType>('auto');
 
+  const {
+    showConsentOverlay,
+    requestConsent,
+    handleAccept: handleConsentAccept,
+    handleDecline: handleConsentDecline,
+  } = useAIConsent();
+
   const [safeWebSearchActive, setSafeWebSearchActive] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [webToggleLabel, setWebToggleLabel] = useState<'web_on' | 'web_off' | null>(null);
+  const webToggleLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
@@ -132,13 +159,16 @@ export function ChatInput({
     setShowModelDropup(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (message.trim() && !isLoading) {
+      const granted = await requestConsent();
+      if (!granted) return;
+
       const finalRequestType = isWebSearchEnabled && !isSafeWebSearchEnabled ? requestType : 'auto';
-      
+
       onSendMessage(message, selectedFiles, selectedImages, aiSettings.selectedModel, finalRequestType);
-      
+
       setMessage('');
       setSelectedFiles([]);
       setSelectedImages([]);
@@ -295,12 +325,82 @@ export function ChatInput({
   const handleImageProcessed = (image: ImageReference) => {
     onImageProcessed(image);
     setShowPhotoUpload(false);
-    
+
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
     }, 100);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1; // Increment depth
+
+    if (!isMobile && e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+      preloadComponents();
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (isMobile) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const file = files[0];
+    const fileType = file.type;
+
+    const imageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+    const documentTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/plain',
+      'text/csv',
+      'application/json',
+      'text/markdown'
+    ];
+
+    pendingDroppedFile = file;
+
+    if (imageTypes.includes(fileType)) {
+      setShowPhotoUpload(true);
+      setTimeout(() => {
+        const event = new CustomEvent('fileDropped', { detail: file });
+        window.dispatchEvent(event);
+      }, 300);
+    } else if (documentTypes.includes(fileType) || fileType.startsWith('text/')) {
+      setShowFileProcessor(true);
+      setTimeout(() => {
+        const event = new CustomEvent('fileDropped', { detail: file });
+        window.dispatchEvent(event);
+      }, 300);
+    }
   };
 
   const getRequestTypeIcon = (type: RequestType) => {
@@ -328,8 +428,9 @@ export function ChatInput({
   const allModels = aiSettings.endpoints.flatMap(endpoint => endpoint.models);
 
   return (
-    <>  
+    <>
       <form onSubmit={handleSubmit} className="relative">
+        <div className="relative">
         {showSuggestions && filteredItems.length > 0 && (
           <div
             className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl shadow-lg max-h-32 overflow-auto max-w-full"
@@ -521,13 +622,43 @@ export function ChatInput({
           </Portal>
         )}
       
-        <div className="bg-white dark:bg-neutral-800 rounded-2xl overflow-hidden w-full max-w-full p-2 sm:p-3 space-y-2 border border-gray-200 dark:border-neutral-700">
+        <div
+          className={`bg-white dark:bg-neutral-800 rounded-2xl overflow-hidden w-full max-w-full p-2 sm:p-3 space-y-2 border transition-all ${
+            isDragging
+              ? 'border-blue-500 dark:border-blue-400 border-2 bg-blue-50 dark:bg-blue-900/10'
+              : 'border-gray-200 dark:border-neutral-700'
+          }`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 bg-blue-50/90 dark:bg-blue-900/20 rounded-2xl">
+              <div className="text-center">
+                <div className="text-blue-600 dark:text-blue-400 text-lg font-semibold mb-1">
+                  {t('chat_dropFileHere')}
+                </div>
+                <div className="text-blue-500 dark:text-blue-500 text-sm">
+                  {t('chat_supportedFiles')}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-end gap-2 w-full max-w-full">
             <textarea
               ref={textareaRef}
               value={message}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onFocus={async () => {
+                if (isMobile) {
+                  const granted = await requestConsent();
+                  if (!granted) {
+                    textareaRef.current?.blur();
+                  }
+                }
+              }}
               placeholder={t('ask_a_question')}
               className="flex-1 relative min-w-0 max-w-full resize-none border-0 bg-transparent px-1 py-2.5 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-0"
               rows={1}
@@ -568,91 +699,97 @@ export function ChatInput({
       
           <div className="flex items-center justify-between gap-1 sm:gap-2 w-full max-w-full overflow-hidden">
             <div className="flex items-center gap-1 flex-1 min-w-0 max-w-full overflow-hidden">
-              
-      
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFileMenu(!showFileMenu);
+                  setShowModelDropup(false);
+                  setShowRequestTypeDropup(false);
+                }}
+                className="flex-shrink-0 w-9 h-9 min-w-[2.25rem] min-h-[2.25rem] aspect-square p-0 flex items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
+              >
+                <Plus size={18} className="flex-shrink-0" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowModelDropup(!showModelDropup);
+                  setShowRequestTypeDropup(false);
+                  setShowFileMenu(false);
+                }}
+                className="flex-shrink-0 w-9 h-9 min-w-[2.25rem] min-h-[2.25rem] aspect-square p-0 flex items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-700 transition-colors"
+              >
+                <Settings2 size={18} className="flex-shrink-0" />
+              </button>
+
               {isWebSearchEnabled && !isSafeWebSearchEnabled && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRequestTypeDropup(!showRequestTypeDropup);
-                      setShowModelDropup(false);
-                      setShowFileMenu(false);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-100 dark:bg-neutral-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors border border-gray-200 dark:border-neutral-600"
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isCurrentlyOn = requestType === 'web_on';
+                    const next: RequestType = isCurrentlyOn ? 'web_off' : 'web_on';
+                    setRequestType(next);
+                    storage.settings.set('requestType', next);
+                    setShowRequestTypeDropup(false);
+                    setWebToggleLabel(next === 'web_on' ? 'web_on' : 'web_off');
+                    if (webToggleLabelTimer.current) clearTimeout(webToggleLabelTimer.current);
+                    webToggleLabelTimer.current = setTimeout(() => setWebToggleLabel(null), 2000);
+                  }}
+                  className={`flex-shrink-0 flex items-center h-9 min-h-[2.25rem] rounded-full transition-all duration-300 overflow-hidden ${
+                    requestType === 'web_on'
+                      ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60'
+                      : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60'
+                  } ${
+                    webToggleLabel 
+                      ? 'px-3 gap-1.5' 
+                      : 'w-9 min-w-[2.25rem] aspect-square justify-center p-0 gap-0'
+                  }`}
+                >
+                  <Globe size={16} className="flex-shrink-0" />
+                  <span
+                    className={`text-xs font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                      webToggleLabel ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
+                    }`}
                   >
-                    {getRequestTypeIcon(requestType)}
-                    <span className="hidden sm:inline">{getRequestTypeLabel(requestType)}</span>
-                    <ChevronUp
-                      size={12}
-                      className={`transition-transform ${showRequestTypeDropup ? 'rotate-180' : ''} hidden sm:inline`}
-                    />
-                  </button>
-                </div>
+                    {webToggleLabel === 'web_on' ? t('webSearch_statusActive') : t('webSearch_statusInactive')}
+                  </span>
+                </button> 
               )}
-      
+
               {isSafeWebSearchEnabled && (
                 <button
                   type="button"
                   onClick={() => {
                     const newState = !safeWebSearchActive;
                     setSafeWebSearchActive(newState);
-      storage.settings.set('safeWebSearchActive', newState.toString());
+                    storage.settings.set('safeWebSearchActive', newState.toString());
+                    setWebToggleLabel(newState ? 'web_on' : 'web_off');
+                    if (webToggleLabelTimer.current) clearTimeout(webToggleLabelTimer.current);
+                    webToggleLabelTimer.current = setTimeout(() => setWebToggleLabel(null), 2000);
                   }}
-                  className={`flex items-center gap-1 px-2 py-1.5 text-xs rounded-lg border transition-colors ${
+                  className={`flex-shrink-0 flex items-center h-9 min-h-[2.25rem] rounded-full transition-all duration-300 overflow-hidden ${
                     safeWebSearchActive
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700 hover:bg-green-200 dark:hover:bg-green-900/50'
-                      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-700 hover:bg-red-200 dark:hover:bg-red-900/50'
+                      ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/60'
+                      : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60'
+                  } ${
+                    webToggleLabel 
+                      ? 'px-3 gap-1.5' 
+                      : 'w-9 min-w-[2.25rem] aspect-square justify-center p-0 gap-0'
                   }`}
                 >
-                  <Globe size={14} />
-                  <span>{t(safeWebSearchActive ? 'webSearch_statusActive' : 'webSearch_statusInactive')}</span>
+                  <Globe size={16} className="flex-shrink-0" />
+                  <span
+                    className={`text-xs font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                      webToggleLabel ? 'max-w-[60px] opacity-100' : 'max-w-0 opacity-0'
+                    }`}
+                  >
+                    {webToggleLabel === 'web_on' ? t('webSearch_statusActive') : t('webSearch_statusInactive')}
+                  </span>
                 </button>
               )}
-      
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowFileMenu(!showFileMenu);
-                    setShowModelDropup(false);
-                    setShowRequestTypeDropup(false);
-                  }}
-                  className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gray-100 dark:bg-neutral-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors border border-gray-200 dark:border-neutral-600"
-                >
-                  <Paperclip size={14} />
-                  <ChevronUp
-                    size={12}
-                    className={`transition-transform ${showFileMenu ? 'rotate-180' : ''} hidden sm:inline`}
-                  />
-                </button>
-              </div>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModelDropup(!showModelDropup);
-                    setShowRequestTypeDropup(false);
-                    setShowFileMenu(false);
-                  }}
-                  className="flex items-center gap-1 ml-1 px-2 py-1.5 text-xs bg-gray-100 dark:bg-neutral-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors border border-gray-200 dark:border-neutral-600"
-                >
-                   <Cpu size={16} />
-                  <span className="truncate" style={{ minWidth: '40px', maxWidth: '80px' }}>
-                    {(() => {
-                      const selectedEndpoint = aiSettings.endpoints.find(ep => ep.models.includes(aiSettings.selectedModel));
-                      const metadata = selectedEndpoint?.modelMetadata?.[aiSettings.selectedModel];
-                      return metadata?.name || aiSettings.selectedModel;
-                    })()}
-                  </span>
-                  <ChevronUp
-                    size={12}
-                    className={`transition-transform ${showModelDropup ? 'rotate-180' : ''} hidden sm:inline`}
-                  />
-                </button>
-              </div>
-              
             </div>
           </div>
         </div>
@@ -660,6 +797,7 @@ export function ChatInput({
         <p className="text-center text-xs text-gray-500 dark:text-gray-400 px-3 sm:px-4 pt-2">
           {t('ai_mistakes_check_short')}
         </p>
+        </div>
       </form>
 
       {showRequestTypeDropup && (
@@ -716,6 +854,13 @@ export function ChatInput({
           </Suspense>
         </div>
       </Modal>
+
+      {showConsentOverlay && (
+        <AIConsentOverlay
+          onAccept={handleConsentAccept}
+          onDecline={handleConsentDecline}
+        />
+      )}
 
       {showUpgradeOverlay && (
         <Portal>
