@@ -5,7 +5,7 @@ export const SETUP_CONFIG = {
   // App branding
   appName: 'xPrivo',
 
-  appVersion: '2.1.0',
+  appVersion: '3.0.0',
 
   // Branding - Icon in the Menu
   menu_icon: '/assets/logo/xprivo-app.png',
@@ -83,12 +83,12 @@ export const SETUP_CONFIG = {
   },
   
   // Legal links
-  privacyPolicyUrl: 'https://www.xprivo.com/policy/privacy',//'https://www.example.com',
-  termsOfServiceUrl: 'https://www.xprivo.com/policy/terms',//'https://www.example.com',
-  imprintUrl: 'https://www.xprivo.com/policy/imprint',//'https://www.example.com',
-  aboutUrl: 'https://www.xprivo.com/links/about-xprivo',
+  privacyPolicyUrl: 'https://www.example.com',
+  termsOfServiceUrl: 'https://www.example.com',
+  imprintUrl: 'https://www.example.com',
+  aboutUrl: 'https://www.example.com',
 
-  invitation: 'on',
+  invitation: 'off',
 
   search_auto_suggest: false,
 
@@ -102,18 +102,18 @@ export const SETUP_CONFIG = {
     enabled: true
   },
 
-  get_pro_models: true, // Should be false unless you show special PRO models
+  get_pro_models: false, // Should be false unless you show special PRO models
 
-  show_search_engine: true,  //search engine button in sidebar - false for local deployment
-  show_browser: true,        //mobile browser - false for local deployment
+  show_search_engine: false,  //search engine button in sidebar - false for local deployment
+  show_browser: false,        //mobile browser - false for local deployment
 
-  show_protection_badge: true,  // Not serving over a privacy-first provider? Probably set the following to false
-  show_made_europe: true,       // Not serving from EU set to false
+  show_protection_badge: false,  // Not serving over a privacy-first provider? Probably set the following to false
+  show_made_europe: false,       // Not serving from EU set to false
 
   acceptConsentBanner: false, //important to make this true if you use non-functional cookies
 
   showWelcomePersonalisation: 'tone' as 'expert' | 'tone' | '',
   
   // Sponsored content settings
-  get_sponsored_content: true
+  get_sponsored_content: false
 };
