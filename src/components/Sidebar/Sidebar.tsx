@@ -575,6 +575,10 @@ export function Sidebar({
                         </span>
                       )}
                     </button>
+                    <a href={faqUrl} onClick={(e) => handleLinkClick(e, faqUrl)} className="relative flex items-center gap-1.5 px-2 py-1.5 sm:py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap" title={t('settings_faq')}>
+                      <HelpCircle size={18} />
+                      <span>{t('settings_faq')}</span>
+                    </a>
                   </div> 
                   <div className="pt-2 pb-0 sm:pb-0 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
