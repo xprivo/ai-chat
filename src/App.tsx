@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import Chat from './components/Chat/Chat';
+
 import { EditWorkspaceModal } from './components/Sidebar/EditWorkspaceModal';
 import { AddChatsModal } from './components/Sidebar/AddChatsModal';
 import { RemoveChatsModal } from './components/Sidebar/RemoveChatsModal';
@@ -14,6 +15,7 @@ import { CSRFManager } from './utils/csrf';
 import { Chat as ChatType, Workspace, Message, Expert } from './types';
 import { initializeExperts, saveExperts, getExperts, createExpert } from './utils/expertsStorage';
 import { storage } from './utils/storage';
+import { capacitorStorage } from './utils/capacitorStorage';
 import { getTonePreference } from './utils/toneStorage';
 import { tones } from './components/UI/ToneSelectionOverlay';
  
@@ -36,12 +38,34 @@ function App() {
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
   const [modalChats, setModalChats] = useState<ChatType[]>([]);
   const [showProOverlay, setShowProOverlay] = useState(false);
+  const [showSearchEngine, setShowSearchEngine] = useState(false);
+  const [searchEngineQuery, setSearchEngineQuery] = useState('');
+  const [searchEngineOpenBrowser, setSearchEngineOpenBrowser] = useState(false);
+  const [isStandaloneSearch] = useState(() => {
+    const path = window.location.pathname;
+    return /(?:\/(?:en|fr|de|es|it|nl|pl|da|pt|bg|hr|cs|el|sl|sv|hi))?\/search\/?$/.test(path);
+  });
+  const [standaloneSearchQuery] = useState(() => {
+    const path = window.location.pathname;
+    if (/(?:\/(?:en|fr|de|es|it|nl|pl|da|pt|bg|hr|cs|el|sl|sv|hi))?\/search\/?$/.test(path)) {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('q') || '';
+    }
+    return '';
+  });
 
   const isNative = Capacitor.isNativePlatform();
+  const [showAppBrowser, setShowAppBrowser] = useState(false);
+  const [appBrowserUrl, setAppBrowserUrl] = useState('');
+  const [appBrowserTitle, setAppBrowserTitle] = useState('');
+  const [appBrowserDescription, setAppBrowserDescription] = useState('');
+  const [appBrowserFavicon, setAppBrowserFavicon] = useState('');
+  const showSearchEngineRef = useRef(showSearchEngine);
+  showSearchEngineRef.current = showSearchEngine;
 
-  const setCustomAssistantIcon = (imageUrl: string) => {
-    localStorage.setItem('assistantIcon', imageUrl);
-    window.dispatchEvent(new Event('storage'));
+  const setCustomAssistantIcon = async (imageUrl: string) => {
+    await capacitorStorage.setItem('assistantIcon', imageUrl);
+    window.dispatchEvent(new CustomEvent('assistantIconUpdated'));
   };
 
   
@@ -75,12 +99,13 @@ function App() {
   }, [chats, isLoaded]);
 
   useEffect(() => {
+    if (isStandaloneSearch) return;
     if (!isLoaded) return;
 
     if (selectedChatId === null && !tempChat) {
       handleNewChat();
     }
-  }, [isLoaded, selectedChatId, tempChat]);
+  }, [isLoaded, selectedChatId, tempChat, isStandaloneSearch]);
 
   // Initialize chat titles from chats
   useEffect(() => {
@@ -237,6 +262,33 @@ function App() {
   }, [theme]);
 
 
+  useEffect(() => {
+    if (!isNative) return;
+    const handleOpenInBrowser = (e: CustomEvent) => {
+      if (showSearchEngineRef.current) return;
+      const { url, title, description, favicon } = e.detail;
+      setAppBrowserUrl(url);
+      setAppBrowserTitle(title || '');
+      setAppBrowserDescription(description || '');
+      setAppBrowserFavicon(favicon || '');
+      setShowAppBrowser(true);
+    };
+    window.addEventListener('openInBrowser', handleOpenInBrowser as EventListener);
+    return () => window.removeEventListener('openInBrowser', handleOpenInBrowser as EventListener);
+  }, [isNative]);
+
+  useEffect(() => {
+    if (isNative) return;
+    const handlePopState = () => {
+      if (showSearchEngineRef.current && window.location.pathname !== '/search') {
+        setShowSearchEngine(false);
+        setSearchEngineQuery('');
+        setSearchEngineOpenBrowser(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isNative]);
 
   const selectedChat = chats.find(chat => chat.id === selectedChatId) ||
                       (tempChat && tempChat.id === selectedChatId ? tempChat : null);
@@ -483,6 +535,18 @@ function App() {
     title: chatTitles[chat.id] || chat.title
   }));
 
+  if (isStandaloneSearch) {
+    return (
+      <div className="fixed inset-0 bg-white dark:bg-gray-900">
+
+        <ProOverlay
+          isOpen={showProOverlay}
+          onClose={() => setShowProOverlay(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-gray-50 dark:bg-gray-900 flex overflow-hidden">
       <Sidebar
@@ -506,6 +570,8 @@ function App() {
         onUpdateExperts={handleUpdateExperts}
         onDeleteExpert={handleDeleteExpert}
         onNewChatWithExpert={handleNewChatWithExpert}
+        onOpenSearchEngine={() => { setShowSearchEngine(true); setIsSidebarOpen(false); if (!isNative) window.history.pushState({ searchEngine: true }, '', '/search'); }}
+        onOpenBrowser={() => { setSearchEngineOpenBrowser(true); setShowSearchEngine(true); setIsSidebarOpen(false); if (!isNative) window.history.pushState({ searchEngine: true }, '', '/search'); }}
       />
 
       <div className="flex-1 flex flex-col lg:ml-0 overflow-hidden">
@@ -584,10 +650,12 @@ function App() {
 
       <ConsentBanner />
 
+
       <ProOverlay
         isOpen={showProOverlay}
         onClose={() => setShowProOverlay(false)}
       />
+
     </div>
   );
 }

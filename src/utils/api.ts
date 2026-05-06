@@ -1,5 +1,6 @@
 import { CSRFManager } from './csrf';
 import { SETUP_CONFIG } from '../config/setup';
+import { capacitorStorage } from './capacitorStorage';
 
 interface ChatAPIRequest {
   messages: any[];
@@ -48,8 +49,8 @@ export async function sendChatMessage(
   onSearchResults?: (results: any[]) => void
 ): Promise<void> {
   try {
-    const getAIAuthorizationHeader = (authorization: string, endpointUrl: string): string => {
-      const proKey = localStorage.getItem('pro_key');
+    const getAIAuthorizationHeader = async (authorization: string, endpointUrl: string): Promise<string> => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       if (proKey) {
         try {
           const url = new URL(endpointUrl);
@@ -66,12 +67,13 @@ export async function sendChatMessage(
     // Get CSRF headers if enabled
     const csrfManager = CSRFManager.getInstance();
     const csrfHeaders = await csrfManager.getCSRFHeaders();
-    
+    const authorizationHeader = await getAIAuthorizationHeader(request.authorization, request.endpoint);
+
     const response = await fetch(request.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': getAIAuthorizationHeader(request.authorization, request.endpoint),
+        'Authorization': authorizationHeader,
         ...csrfHeaders,
         ...(request.ads_token && { 'X-Ads-Token': request.ads_token }),
         ...(request.chat_language && { 'X-Lang-Chat': request.chat_language }),

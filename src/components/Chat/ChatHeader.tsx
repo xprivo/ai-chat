@@ -10,7 +10,7 @@ import { ExpertsOverlay } from '../Experts/ExpertsOverlay';
 import { ExpertEditModal } from '../Experts/ExpertEditModal';
 import { ExpertLimitOverlay } from '../UI/ExpertLimitOverlay';
 
-import { getTonePreference, saveTonePreference } from '../../utils/toneStorage';
+import { getTonePreference, getToneNotificationRead } from '../../utils/toneStorage';
 
 interface ChatHeaderProps {
   chat: Chat;
@@ -59,21 +59,28 @@ export function ChatHeader({
   const [isCreatingExpert, setIsCreatingExpert] = useState(false);
   const [showExpertLimitOverlay, setShowExpertLimitOverlay] = useState(false);
   const [selectedToneId, setSelectedToneId] = useState<string | null>(null);
+  const [toneNotificationRead, setToneNotificationRead] = useState(true);
 
   useEffect(() => {
-    const loadTonePreference = async () => {
+    const loadToneState = async () => {
       const toneId = await getTonePreference();
       setSelectedToneId(toneId);
+      const read = await getToneNotificationRead();
+      setToneNotificationRead(read);
     };
-    loadTonePreference();
+    loadToneState();
 
-    const handleToneChange = () => {
-      loadTonePreference();
+    const handleNotificationRead = () => setToneNotificationRead(true);
+
+    window.addEventListener('tonePreferenceChanged', loadToneState);
+    window.addEventListener('toneNotificationRead', handleNotificationRead);
+    return () => {
+      window.removeEventListener('tonePreferenceChanged', loadToneState);
+      window.removeEventListener('toneNotificationRead', handleNotificationRead);
     };
-
-    window.addEventListener('tonePreferenceChanged', handleToneChange);
-    return () => window.removeEventListener('tonePreferenceChanged', handleToneChange);
   }, []);
+
+  const showToneNotification = !!(selectedToneId && selectedToneId !== 'standard' && !toneNotificationRead);
   
   const handleDeleteConfirm = () => {
     onDeleteChat();
@@ -145,7 +152,7 @@ export function ChatHeader({
             >
               <Menu size={20} />
               
-              {selectedToneId && selectedToneId !== 'standard' && (
+              {showToneNotification && (
                 <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 text-xs font-semibold text-white bg-red-500 rounded-full">
                   1
                 </span>

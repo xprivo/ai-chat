@@ -60,7 +60,7 @@ export function SearchAllChatsOverlay({
       style={{
         paddingTop: 'env(safe-area-inset-top)',
         paddingBottom: 'env(safe-area-inset-bottom)',
-        paddingLeft: 'max(10px, env(safe-area-inset-left))', // Ensures 10px or safe area
+        paddingLeft: 'max(10px, env(safe-area-inset-left))',
         paddingRight: 'max(10px, env(safe-area-inset-right))'
       }}
     > 

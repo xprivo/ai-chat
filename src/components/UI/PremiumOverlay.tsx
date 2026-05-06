@@ -17,10 +17,7 @@ export function PremiumOverlay({ isOpen, type, onClose }: PremiumOverlayProps) {
 
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      const platform = Capacitor.getPlatform();
-      if (platform === 'ios') {
-        setIsMobile(true);
-      }
+      setIsMobile(true);
     }
   }, []);
   

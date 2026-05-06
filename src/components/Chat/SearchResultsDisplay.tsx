@@ -25,8 +25,7 @@ function FaviconImg({ hostname, base64Favicon, faviconUrl }: { hostname: string;
     ? faviconUrl
     : base64Favicon
     ? `data:image/png;base64,${base64Favicon}`
-    : (hostname ? `https://xxx.com/${hostname}` : FALLBACK_FAVICON_URL);
-   //TODO: here add your own favicon proxy / fix this: https://xxx.com/${hostname}
+    : (hostname ? `https://degoogled.xprivo.com/${hostname}` : FALLBACK_FAVICON_URL);
 
   return (
     <img
@@ -61,12 +60,11 @@ export function SearchResultsDisplay({ searchResults }: SearchResultsDisplayProp
           url: link,
           title: title || '',
           description: '',
-          favicon: hostname ? `https://xxx.com/${hostname}` : '',
-          //TODO: here add your own favicon proxy / fix this https://xxx.com/${hostname}
+          favicon: hostname ? `https://degoogled.xprivo.com/${hostname}` : '',
         },
       }));
     } else {
-      window.open(link, '_blank', 'noopener,noreferrer');
+      window.location.href = link;
     }
   };
 

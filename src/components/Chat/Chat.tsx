@@ -1,5 +1,5 @@
 import { SETUP_CONFIG } from '../../config/setup';
-import React, { useState, useRef, useEffect } from 'react'; // Import useRef
+import React, { useState, useRef, useEffect } from 'react';
 import { Chat as ChatType, Message, FileReference, ImageReference, APIMessage, SearchResults, Workspace, Expert } from '../../types';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
@@ -14,6 +14,7 @@ import { ErrorOverlay } from '../UI/ErrorOverlay';
 import { SplitChatOverlay } from '../UI/SplitChatOverlay';
 import { CSRFManager } from '../../utils/csrf';
 import { storage } from '../../utils/storage';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 import { setupKeyboardHandler, cleanupKeyboardHandler } from '../../utils/keyboardHandler';
 import { fetchProModels, ImportantNotification } from '../../utils/proModels';
 import { Briefcase, Sparkles, X } from 'lucide-react';
@@ -117,20 +118,6 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   */
 
 
-  const getAIAuthorizationHeader = (modelEndpoint: any): string => {
-    const proKey = localStorage.getItem('pro_key');
-    if (proKey) {
-      try {
-        const url = new URL(modelEndpoint.url);
-        if (url.hostname.startsWith('www.xprivo.com')) {
-          return `Bearer ${proKey}`;
-        }
-      } catch (error) {
-        console.error('Error parsing endpoint URL:', error);
-      }
-    }
-    return modelEndpoint.authorization;
-  };
 
   // Setup keyboard handler
   useEffect(() => {
@@ -177,13 +164,13 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
         languageToUse = navigator.language.split('-')[0];
       }
       
-      const proKey = localStorage.getItem('pro_key');
-      
+      const proKey = await capacitorStorage.getItem('pro_key');
+
       if (proKey) {
         setSponsoredContent([]);
         return;
       }
-      
+
       if (!SETUP_CONFIG.get_sponsored_content) {
         setSponsoredContent(defaultSponsoredContent);
         return;
@@ -261,8 +248,8 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   };
   
   useEffect(() => {
-    const handleStorageChange = () => {
-      const proKey = localStorage.getItem('pro_key');
+    const handleStorageChange = async () => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       if (proKey) {
         setSponsoredContent([]);
       } else if (sponsoredContent.length === 0) {
@@ -330,13 +317,18 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
   }, [sponsoredContent.length]);
 
   useEffect(() => {
-    const checkProKey = () => {
-      const proKey = localStorage.getItem('pro_key');
+    const checkProKey = async () => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       setHasProKey(!!proKey);
     };
     checkProKey();
-    window.addEventListener('storage', checkProKey);
-    return () => window.removeEventListener('storage', checkProKey);
+    const handleStorageEvent = () => { checkProKey(); };
+    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('accountStatusChanged', handleStorageEvent);
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('accountStatusChanged', handleStorageEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -1547,7 +1539,7 @@ export default function Chat({ chat, onUpdateChat, onDeleteChat, workspaceInstru
         </div>
 
 
-            <div className="fixed left-0 right-0 z-30 lg:left-64 max-w-[1000px] mx-auto"
+            <div className="chat-input-wrapper fixed left-0 right-0 z-30 lg:left-64 max-w-[1000px] mx-auto"
               style={{
                 bottom: '0',
                 paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',

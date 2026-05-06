@@ -77,7 +77,7 @@ export function ChatSettings({
     onClose();
   };
 
-  return (
+return (
     <div className="flex flex-col w-full overflow-hidden h-[600px] max-h-[calc(100dvh-10rem)] sm:max-h-[calc(100dvh-12rem)]">
       <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 custom-scrollbar"> 
         <div className="space-y-6">

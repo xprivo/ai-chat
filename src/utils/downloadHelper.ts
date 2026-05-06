@@ -11,22 +11,29 @@ export async function downloadFile(
   const isNative = Capacitor.isNativePlatform();
 
   if (isNative) {
-   try {
+    try {
+      const platform = Capacitor.getPlatform();
+
       const result = await Filesystem.writeFile({
         path: filename,
         data: content,
         directory: Directory.Cache,
-        encoding: 'utf8'
+        encoding: 'utf8',
+        recursive: true,
       });
 
-      await Share.share({
-        title: 'Download Account Key',
-        url: result.uri,
-        dialogTitle: 'Save Account Key'
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          title: filename,
+          url: result.uri,
+          dialogTitle: platform === 'android' ? 'Save to Downloads' : 'Save file',
+          files: [result.uri],
+        });
+      }
 
     } catch (error) {
-      console.error('Error downloading file on native platform:', error); 
+      console.error('Error downloading file on native platform:', error);
       throw error;
     }
   } else {

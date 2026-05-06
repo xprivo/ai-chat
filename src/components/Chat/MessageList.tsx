@@ -80,8 +80,30 @@ export function MessageList({
                 {t('sponsored_content_title')}
               </p>
             )}
-          </div> 
+          </div>
           <SponsoredContent ads={streamingSponsoredContent} t={t} />
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('showProOverlay'))}
+              className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-600 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-neutral-500 hover:bg-gray-50 dark:hover:bg-neutral-700 transition-all duration-200"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-amber-500 group-hover:scale-110 transition-transform duration-200"
+              >
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              {t('search_remove_ads')}
+            </button>
+          </div>
         </div>
       )}
       

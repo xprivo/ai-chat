@@ -6,8 +6,9 @@ import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
 import rehypeKatex from 'rehype-katex';
 import { Capacitor } from '@capacitor/core';
-import { Bot, Edit2, RotateCcw, AlertCircle, Copy, Check, Info, Split, FileEdit, Download } from 'lucide-react';
-import { Message, ImageReference } from '../../types';
+import { capacitorStorage } from '../../utils/capacitorStorage';
+import { Bot, Pencil as Edit2, RotateCcw, AlertCircle, Copy, Check, Info, Split, File as FileEdit, Download } from 'lucide-react';
+import { Message, ImageReference } from '../../types'; 
 import { FileChip } from './FileChip';
 import { ImageChip } from './ImageChip';
 import { Button } from '../UI/Button';
@@ -97,7 +98,6 @@ function tokenize(input: string): Segment[] {
       continue;
     }
 
-    // Inline math $...$  (only if content looks like math — no newlines, properly closed, has math chars)
     if (input[i] === '$') {
       const j = i + 1;
       let closeJ = -1;
@@ -126,7 +126,6 @@ function tokenize(input: string): Segment[] {
       continue;
     }
 
-    // Bare \begin{env}...\end{env}
     if (input[i] === '\\' && input.slice(i, i + 7) === '\\begin{') {
       const envMatch = input.slice(i).match(/^\\begin\{([^}]+)\}/);
       if (envMatch) {
@@ -155,22 +154,17 @@ function unescapeDisplayBackslashes(s: string): string {
   return s.replace(/\\\\([a-zA-Z({[\^_])/g, '\\$1');
 }
 
-// Maybe we need to modify this in the future - let's see
 function normalizeDelimitersInText(text: string): string {
   let result = text;
-  // \\\[ ... \\\] (double-escaped display)
   result = result.replace(/\\\\\[\s*([\s\S]*?)\s*\\\\\]/g, (_, inner) =>
     `\n$$\n${unescapeDisplayBackslashes(inner.trim())}\n$$\n`
   );
-  // \[ ... \] (display math)
   result = result.replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, (_, inner) =>
     `\n$$\n${inner.trim()}\n$$\n`
   );
-  // \\( ... \\) (double-escaped inline)
   result = result.replace(/\\\\\(\s*([\s\S]*?)\s*\\\\\)/g, (_, inner) =>
     `$${unescapeDisplayBackslashes(inner.trim())}$`
   );
-  // \( ... \) (inline math)
   result = result.replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, (_, inner) =>
     `$${inner.trim()}$`
   );
@@ -207,11 +201,11 @@ function processPlainSegment(text: string): string {
 }
 
 function normalizeMathDelimiters(text: string): string {
-  // Protect escaped dollar signs
+
   const escaped = text.replace(/\\\$/g, '\x00DOLLAR\x00');
-  // Convert \[ \] and \( \) style delimiters in the raw text before tokenizing
+
   const preNorm = normalizeDelimitersInText(escaped);
-  // Tokenize into code/display/inline/text segments (no regex-split infinite loop possible)
+
   const tokens = tokenize(preNorm);
   const parts: string[] = [];
 
@@ -264,6 +258,24 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
   const [showEditResponseOverlay, setShowEditResponseOverlay] = useState(false);
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const [showCustomTemplateOverlay, setShowCustomTemplateOverlay] = useState(false);
+  const [assistantIconUrl, setAssistantIconUrl] = useState<string | null>(() =>
+    Capacitor.isNativePlatform() ? null : localStorage.getItem('assistantIcon')
+  );
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    capacitorStorage.getItem('assistantIcon').then(val => {
+      setAssistantIconUrl(val);
+    });
+
+    const handler = () => {
+      capacitorStorage.getItem('assistantIcon').then(val => {
+        setAssistantIconUrl(val);
+      });
+    };
+    window.addEventListener('assistantIconUpdated', handler);
+    return () => window.removeEventListener('assistantIconUpdated', handler);
+  }, []);
   
   const downloadMenuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -402,17 +414,16 @@ export function MessageBubble({ message, availableImages, onEdit, onRetry, onSpl
   }, [message.content, message.role, isStreaming]);
 
   const getAssistantIcon = () => {
-    const customIcon = localStorage.getItem('assistantIcon');
-    if (customIcon) {
+    if (assistantIconUrl) {
       return (
         <img
-          src={customIcon}
+          src={assistantIconUrl}
           alt="Assistant"
           className="w-full h-full object-cover rounded-full"
           onError={(e) => {
-            localStorage.removeItem('assistantIcon');
+            capacitorStorage.removeItem('assistantIcon');
+            setAssistantIconUrl(null);
             e.currentTarget.style.display = 'none';
-            e.currentTarget.parentElement!.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="10" x="3" y="11" rx="2"/><circle cx="12" cy="5" r="2"/><path d="m12 7 2 4H10l2-4Z"/></svg>';
           }}
         />
       );

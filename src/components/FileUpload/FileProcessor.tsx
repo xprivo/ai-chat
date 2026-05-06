@@ -143,7 +143,6 @@ export function FileProcessor({ onFileProcessed, onClose, existingFileNames, cha
       
       const content = await extractTextFromFile(selectedFile);
       
-      // Check if content extraction was successful
       if (!content || content.length < 1) {
         setError(t('notPossibleToExtractContent'));
         setIsProcessing(false);

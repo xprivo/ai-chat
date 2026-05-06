@@ -5,7 +5,12 @@ export const SETUP_CONFIG = {
   // App branding
   appName: 'xPrivo',
 
-  appVersion: '3.0.0',
+  appVersion: '4.0.0',
+
+  // FOSS / F-Droid mode: when true and running on native Android, the app behaves like
+  // an F-Droid distribution — no Google Play billing. Upgrade opens the
+  // external payment website instead, exactly like the browser version.
+  isFoss: false,
 
   // Branding - Icon in the Menu
   menu_icon: '/assets/logo/xprivo-app.png',
@@ -23,7 +28,7 @@ export const SETUP_CONFIG = {
   pro_switcher: 'banner' as 'off' | 'banner' | 'on',
   pro_switcher_website: "https://www.example.com",
 
-  // Web Search Configuration
+  // Web Search Configuration - DEPRECATED  
   webSearch: {
     endpoint: 'https://www.xprivo.com/v1/web/search', // The URL for your web search API
     country: '',
@@ -86,7 +91,7 @@ export const SETUP_CONFIG = {
   privacyPolicyUrl: 'https://www.example.com',
   termsOfServiceUrl: 'https://www.example.com',
   imprintUrl: 'https://www.example.com',
-  aboutUrl: 'https://www.example.com',
+  aboutUrl: 'https://www.xprivo.com/links/about-xprivo',
 
   invitation: 'off',
 
@@ -102,13 +107,13 @@ export const SETUP_CONFIG = {
     enabled: true
   },
 
-  get_pro_models: false, // Should be false unless you show special PRO models
-
+  get_pro_models: true, // Should be false unless you show special PRO models
+ 
   show_search_engine: false,  //search engine button in sidebar - false for local deployment
   show_browser: false,        //mobile browser - false for local deployment
 
-  show_protection_badge: false,  // Not serving over a privacy-first provider? Probably set the following to false
-  show_made_europe: false,       // Not serving from EU set to false
+  show_protection_badge: true,  // Not serving over a privacy-first provider? Probably set the following to false
+  show_made_europe: true,       // Not serving from EU set to false
 
   acceptConsentBanner: false, //important to make this true if you use non-functional cookies
 

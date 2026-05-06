@@ -42,18 +42,26 @@ export async function saveBlob(blob: Blob, filename: string) {
   if (Capacitor.isNativePlatform()) {
     try {
       const base64Data = await convertBlobToBase64(blob) as string;
+      const base64 = (base64Data as string).split(',')[1];
+
+      const platform = Capacitor.getPlatform();
 
       const savedFile = await Filesystem.writeFile({
         path: filename,
-        data: base64Data.split(',')[1],
-        directory: Directory.Documents,
+        data: base64,
+        directory: Directory.Cache,
+        recursive: true,
       });
 
-      await Share.share({
-        url: savedFile.uri,
-        title: 'Download',
-        text: 'Word / PDF',
-      });
+      const canShareResult = await Share.canShare();
+      if (canShareResult.value) {
+        await Share.share({
+          url: savedFile.uri,
+          title: filename,
+          dialogTitle: platform === 'android' ? 'Save to Downloads' : 'Save file',
+          files: [savedFile.uri],
+        });
+      }
     } catch (error) {
       console.error('Mobile Save Error:', error);
       throw error;

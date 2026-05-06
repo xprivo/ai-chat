@@ -3,6 +3,7 @@ import { ChevronDown, Check, X, Zap, Brain } from 'lucide-react';
 import { Portal } from '../UI/Portal';
 import { useTranslation } from '../../hooks/useTranslation';
 import { AISettings } from '../../types';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -17,13 +18,18 @@ export function ModelSelector({ selectedModel, onModelChange, aiSettings }: Mode
   const [hasProKey, setHasProKey] = useState(false);
 
   useEffect(() => {
-    const checkProKey = () => {
-      const proKey = localStorage.getItem('pro_key');
+    const checkProKey = async () => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       setHasProKey(!!proKey);
     };
     checkProKey();
-    window.addEventListener('storage', checkProKey);
-    return () => window.removeEventListener('storage', checkProKey);
+    const handleStorageEvent = () => { checkProKey(); };
+    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('accountStatusChanged', handleStorageEvent);
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('accountStatusChanged', handleStorageEvent);
+    };
   }, []);
 
   const getAllModels = () => {

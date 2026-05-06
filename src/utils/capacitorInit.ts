@@ -2,6 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { migrateToCapacitorStorage } from './capacitorStorage';
 import { configureRevenueCat } from './revenueCatDummy';
+import { SETUP_CONFIG } from '../config/setup';
 
 export async function initializeCapacitor(): Promise<void> {
   const isNative = Capacitor.isNativePlatform();
@@ -9,10 +10,11 @@ export async function initializeCapacitor(): Promise<void> {
   if (isNative) {
 
     try {
-      // Migrate existing localStorage data to Capacitor Preferences
       await migrateToCapacitorStorage();
 
-      if (Capacitor.getPlatform() === 'ios') {
+      const platform = Capacitor.getPlatform();
+
+      if (platform === 'ios') {
         const REVENUECAT_IOS_API_KEY = import.meta.env.VITE_REVENUECAT_IOS_API_KEY;
         if (REVENUECAT_IOS_API_KEY) {
           try {
@@ -23,20 +25,27 @@ export async function initializeCapacitor(): Promise<void> {
         } else {
           console.warn('iOS app key not found in environment variables');
         }
+      } else if (platform === 'android' && !SETUP_CONFIG.isFoss) {
+        const REVENUECAT_ANDROID_API_KEY = import.meta.env.VITE_REVENUECAT_ANDROID_API_KEY;
+        if (REVENUECAT_ANDROID_API_KEY) {
+          try {
+            await configureRevenueCat(REVENUECAT_ANDROID_API_KEY);
+          } catch (error) {
+            console.error('Android RevenueCat configuration failed:', error);
+          }
+        } else {
+          console.warn('Android app key not found in environment variables');
+        }
       }
 
-      //for testing
       App.addListener('appStateChange', (state) => {
         if (state.isActive) {
-          // App came to foreground
           //console.log('App resumed');
         } else {
-          // App went to background
           //console.log('App backgrounded');
         }
       });
 
-      // (deep linking)
       App.addListener('appUrlOpen', (event) => {
         //console.log('App opened with URL:', event.url);
       });
@@ -53,7 +62,6 @@ export async function initializeCapacitor(): Promise<void> {
   }
 }
 
-// Get app info
 export async function getAppInfo() {
   if (Capacitor.isNativePlatform()) {
     try {
@@ -67,7 +75,6 @@ export async function getAppInfo() {
   return null;
 }
 
-// Exit app (useful for Android)
 export async function exitApp() {
   if (Capacitor.isNativePlatform()) {
     try {

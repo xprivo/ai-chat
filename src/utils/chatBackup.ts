@@ -1,3 +1,5 @@
+// Chat backup and restore utilities
+
 import { Chat, Workspace, Expert } from '../types';
 import { storage } from './storage';
 import { downloadFile } from './downloadHelper';
@@ -41,10 +43,12 @@ export async function exportChatsToFile(chats: Chat[], workspaces: Workspace[], 
 }
 
 export async function exportSingleChat(chat: Chat, workspaces: Workspace[], files: Record<string, string>, experts: Expert[] = []): Promise<void> {
+  // Get only files related to this chat
   const chatFiles = Object.fromEntries(
     Object.entries(files).filter(([key]) => key.startsWith(`${chat.id}_`))
   );
 
+  // Get workspace if chat belongs to one
   const chatWorkspace = chat.workspaceId ? workspaces.find(w => w.id === chat.workspaceId) : undefined;
   const chatWorkspaces = chatWorkspace ? [chatWorkspace] : [];
 
@@ -64,6 +68,7 @@ export async function importChatsFromFile(file: File): Promise<{
   error?: string;
 }> {
   try {
+    // Validate file type
     if (!file.name.endsWith('.txt')) {
       return {
         chats: [],
@@ -78,6 +83,7 @@ export async function importChatsFromFile(file: File): Promise<{
     const content = await file.text();
     const backup: ChatBackup = JSON.parse(content);
 
+    // Validate backup structure
     if (!backup.version || !backup.data || !Array.isArray(backup.data.chats)) {
       return {
         chats: [],
@@ -89,6 +95,7 @@ export async function importChatsFromFile(file: File): Promise<{
       };
     }
 
+    // Convert date strings back to Date objects
     const chats = backup.data.chats.map(chat => ({
       ...chat,
       createdAt: new Date(chat.createdAt),

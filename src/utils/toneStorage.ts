@@ -27,6 +27,8 @@ export async function saveTonePreference(toneId: string | null): Promise<void> {
     } else {
       await storage.settings.remove('selectedTone');
     }
+    // Mark notification as unread whenever tone changes
+    await storage.settings.set('toneNotificationRead', 'false');
   } catch (error) {
     console.error('Error saving tone preference:', error);
   }
@@ -37,5 +39,22 @@ export async function clearTonePreference(): Promise<void> {
     await storage.settings.remove('selectedTone');
   } catch (error) {
     console.error('Error clearing tone preference:', error);
+  }
+}
+
+export async function getToneNotificationRead(): Promise<boolean> {
+  try {
+    const val = await storage.settings.get('toneNotificationRead');
+    return val === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setToneNotificationRead(read: boolean): Promise<void> {
+  try {
+    await storage.settings.set('toneNotificationRead', read ? 'true' : 'false');
+  } catch (error) {
+    console.error('Error saving tone notification read state:', error);
   }
 }

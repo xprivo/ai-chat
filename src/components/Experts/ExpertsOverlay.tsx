@@ -156,8 +156,8 @@ export function ExpertsOverlay({
                       ${
                         isSelected
                           ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 ' + // Mobile/default styles
-                            'sm:bg-transparent sm:dark:bg-transparent sm:border-2 sm:text-gray-400 sm:hover:border-blue-500 sm:hover:text-blue-500 sm:hover:bg-transparent' // Desktop overrides
+                          : 'bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 ' +
+                            'sm:bg-transparent sm:dark:bg-transparent sm:border-2 sm:text-gray-400 sm:hover:border-blue-500 sm:hover:text-blue-500 sm:hover:bg-transparent'
                       }
                     `}
                   >

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 
-import { X, Sparkles, Shield, Zap, Globe, Clock, HeadphonesIcon, Loader2, Copy, Download, Key, CheckCircle, LogOut, Settings, User, TrendingUp, RefreshCwOff, ArrowBigUpDash } from 'lucide-react';
+import { X, Sparkles, Shield, Zap, Globe, Clock, Headphones as HeadphonesIcon, Loader2, Copy, Download, Key, CheckCircle, LogOut, Settings, User, TrendingUp, RefreshCwOff, ArrowBigUpDash, Eye, EyeOff } from 'lucide-react';
 import { Portal } from './Portal';
 import { useTranslation } from '../../hooks/useTranslation';
 import { KeyInputOverlay } from './KeyInputOverlay';
@@ -18,7 +18,6 @@ interface ProOverlayProps {
   onClose: () => void;
 }
 
-// Global cache variables
 let cachedPrice: string | null = null;
 let cachedProRequests: string | null = null;
 
@@ -32,29 +31,39 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   const [generatedKey, setGeneratedKey] = useState('');
   const [isLoadingKey, setIsLoadingKey] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [showRevealKey, setShowRevealKey] = useState(false);
+  const [revealedKey, setRevealedKey] = useState('');
+  const [keyCopied, setKeyCopied] = useState(false);
   const [subscriberId, setSubscriberId] = useState<string | null>(null);
   const [isProUser, setIsProUser] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
+  const [isFossAndroid, setIsFossAndroid] = useState(false);
   const [price, setPrice] = useState<string | null>(null);
-  // Default to 250+ or cached value until loaded
-  const [proRequestsCount, setProRequestsCount] = useState<number>(cachedProRequests || 50); 
+  const [proRequestsCount, setProRequestsCount] = useState<number>(cachedProRequests || 50);
   const [isLoadingPrice, setIsLoadingPrice] = useState(true);
   const [quotaInfo, setQuotaInfo] = useState<QuotaInfo | null>(null);
   const [isLoadingQuota, setIsLoadingQuota] = useState(false);
 
   const privacyPolicyUrl = SETUP_CONFIG.privacyPolicyUrl;
   const termsOfServiceUrl = SETUP_CONFIG.termsOfServiceUrl;
-    
+
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       const platform = Capacitor.getPlatform();
       if (platform === 'ios') {
         setIsMobile(true);
+      } else if (platform === 'android') {
+        setIsAndroid(true);
+        if (SETUP_CONFIG.isFoss) {
+          setIsFossAndroid(true);
+        } else {
+          setIsMobile(true);
+        }
       }
     }
   }, []);
-
 
   useEffect(() => {
     const fetchPriceAndRequests = async () => {
@@ -83,30 +92,30 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         const [apiData, appStorePrice] = await Promise.all([apiFetchPromise, storeFetchPromise]);
 
         if (isMobile) {
-            if (appStorePrice) {
-                setPrice(appStorePrice);
-                cachedPrice = appStorePrice;
-            } else if (!cachedPrice) {
-                setPrice('8€');
-            }
+          if (appStorePrice) {
+            setPrice(appStorePrice);
+            cachedPrice = appStorePrice;
+          } else if (!cachedPrice) {
+            setPrice('8€');
+          }
 
-            if (apiData && apiData.pro_requests) {
-                setProRequestsCount(apiData.pro_requests);
-                cachedProRequests = apiData.pro_requests;
-            }
+          if (apiData && apiData.pro_requests) {
+            setProRequestsCount(apiData.pro_requests);
+            cachedProRequests = apiData.pro_requests;
+          }
         } else {
-            if (apiData) {
-                if (apiData.full_price) {
-                    setPrice(apiData.full_price);
-                    cachedPrice = apiData.full_price;
-                }
-                if (apiData.pro_requests) {
-                    setProRequestsCount(apiData.pro_requests);
-                    cachedProRequests = apiData.pro_requests;
-                }
-            } else if (!cachedPrice) {
-                 setPrice('8€');
+          if (apiData) {
+            if (apiData.full_price) {
+              setPrice(apiData.full_price);
+              cachedPrice = apiData.full_price;
             }
+            if (apiData.pro_requests) {
+              setProRequestsCount(apiData.pro_requests);
+              cachedProRequests = apiData.pro_requests;
+            }
+          } else if (!cachedPrice) {
+            setPrice('8€');
+          }
         }
 
       } catch (error) {
@@ -167,13 +176,34 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
   const handleLinkClick = async (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
     event.preventDefault();
-    if (isMobile) {
+    if (isMobile || isFossAndroid) {
       await Browser.open({ url });
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
-    
+
+  const handleRevealKey = async () => {
+    if (showRevealKey) {
+      setShowRevealKey(false);
+      setRevealedKey('');
+      return;
+    }
+    const proKey = await capacitorStorage.getItem('pro_key');
+    setRevealedKey(proKey || '');
+    setShowRevealKey(true);
+  };
+
+  const handleCopyRevealedKey = async () => {
+    try {
+      await navigator.clipboard.writeText(revealedKey);
+      setKeyCopied(true);
+      setTimeout(() => setKeyCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy key:', error);
+    }
+  };
+
   const handleLogout = async () => {
     await capacitorStorage.removeItem('pro_key');
     await capacitorStorage.removeItem('pro_subscription_type');
@@ -200,7 +230,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
   const handleTryNow = () => {
     localStorage.setItem('accountStatus', 'pro');
-    window.dispatchEvent(new CustomEvent('accountStatusChanged', { 
+    window.dispatchEvent(new CustomEvent('accountStatusChanged', {
       detail: { isSignedUp: true }
     }));
     window.dispatchEvent(new Event('storage'));
@@ -215,12 +245,11 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   };
 
   const handleUpgradeToPro = async () => {
-     
     if (isMobile) {
       setIsUpgrading(true);
       try {
         const appUserID = await getAppUserID();
-    
+
         if (!appUserID) {
           throw new Error('Failed to get user ID');
         }
@@ -230,21 +259,21 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         if (!loginSuccess) {
           throw new Error('Failed to login with anonymous id');
         }
-    
+
         const hasActiveSubscription = await checkProSubscriptionStatus();
-    
+
         if (hasActiveSubscription) {
           setIsUpgrading(false);
           onClose();
-    
+
           await delay(100);
-    
+
           setIsLoadingKey(true);
           setGeneratedKey('');
           setShowKeyGenerated(true);
-    
+
           await delay(2000);
-    
+
           const checkSubscriberResponse = await fetch('https://www.xprivo.com/auth/checknewsubscriber', {
             method: 'POST',
             headers: {
@@ -252,49 +281,45 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
             },
             body: JSON.stringify({ subscriber_id: appUserID })
           });
-    
+
           if (!checkSubscriberResponse.ok) {
             throw new Error('Failed to retrieve account key');
           }
-    
+
           const checkSubscriberData = await checkSubscriberResponse.json();
           const proKey = checkSubscriberData.pro_key;
-    
+
           if (!proKey) {
             throw new Error('No pro key received');
           }
-    
+
           setGeneratedKey(proKey);
           setIsLoadingKey(false);
           return;
         }
-    
-        // No active subscription, proceed with purchase
+
         const result = await purchaseProSubscription();
-    
+
         if (result.success && result.customerInfo) {
           const entitlements = result.customerInfo.entitlements.active;
-    
+
           if ('pro' in entitlements) {
             setIsUpgrading(false);
             onClose();
-    
+
             await delay(100);
-    
+
             setIsLoadingKey(true);
             setGeneratedKey('');
             setShowKeyGenerated(true);
-    
+
             await delay(4000);
-    
-            //console.log('[Purchase] Checking subscriber with ID:', appUserID);
-    
+
             if (!appUserID) {
               throw new Error('No subscriber ID available');
             }
 
             const fetchKey = async () => {
-              //console.log('[Purchase] Attempting to fetch from checknewsubscriber...');
               let response;
               try {
                 response = await fetch('https://www.xprivo.com/auth/checknewsubscriber', {
@@ -308,7 +333,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 console.error('[Purchase] Network error name:', networkError.name);
                 throw new Error('Network error: Could not reach server');
               }
-    
+
               if (!response.ok) {
                 let errorBody = '';
                 try {
@@ -317,32 +342,30 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 } catch (e) {
                   console.error('[Purchase] Could not read error response body');
                 }
-                // Throw an error to be caught by our retry logic
                 throw new Error(`Server error (Status: ${response.status})`);
               }
               return response.json();
             };
-    
+
             let checkSubscriberData;
             try {
-              // First attempt
               checkSubscriberData = await fetchKey();
             } catch (error) {
               console.warn(`[Purchase] First attempt failed (${error.message}). Waiting before retry.`);
 
               await delay(10000);
-    
+
               console.log('[Purchase] Retrying fetch...');
 
               checkSubscriberData = await fetchKey();
             }
 
             const proKey = checkSubscriberData.pro_key;
-    
+
             if (!proKey) {
               throw new Error('No pro key received');
             }
-    
+
             setGeneratedKey(proKey);
             setIsLoadingKey(false);
           } else {
@@ -351,7 +374,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         } else if (result.error === 'User cancelled') {
           console.log('User cancelled the purchase');
         } else {
-          //alert('Purchase failed: ' + (result.error || 'Unknown error')); //use that for debugging
+          //alert('Purchase failed: ' + (result.error || 'Unknown error'));
         }
       } catch (error) {
         console.error('Purchase error:', error);
@@ -359,25 +382,29 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
         setShowKeyGenerated(false);
         setIsLoadingKey(false);
         alert(t('purchase_error'));
-        // However the purchase was still working
       } finally {
         setIsUpgrading(false);
       }
     } else {
       setIsUpgrading(true);
-      window.location.href = "https://www.xprivo.com/auth/pro-init";
+      if (isFossAndroid) {
+        await Browser.open({ url: 'https://www.xprivo.com/auth/pro-init' });
+        setIsUpgrading(false);
+      } else {
+        window.location.href = 'https://www.xprivo.com/auth/pro-init';
+      }
     }
   };
 
   const handleKeyInputSuccess = (key: string) => {
-    document.cookie = `pro_key=${key}; path=/; max-age=${365 * 24 * 60 * 60}`; // 1 year
-     
+    document.cookie = `pro_key=${key}; path=/; max-age=${365 * 24 * 60 * 60}`;
+
     localStorage.setItem('accountStatus', 'pro');
-    window.dispatchEvent(new CustomEvent('accountStatusChanged', { 
+    window.dispatchEvent(new CustomEvent('accountStatusChanged', {
       detail: { isSignedUp: true }
     }));
     window.dispatchEvent(new Event('storage'));
-     
+
     setShowKeyInput(false);
     onClose();
   };
@@ -385,10 +412,11 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
   const handleKeyGeneratedClose = async (proKey: string) => {
     await capacitorStorage.setItem('pro_key', proKey);
     await capacitorStorage.setItem('accountStatus', 'pro');
-    await capacitorStorage.setItem('pro_subscription_type', 'ios_iap');
+    const subType = isAndroid ? 'android_iap' : 'ios_iap';
+    await capacitorStorage.setItem('pro_subscription_type', subType);
     localStorage.setItem('pro_key', proKey);
     localStorage.setItem('accountStatus', 'pro');
-    localStorage.setItem('pro_subscription_type', 'ios_iap');
+    localStorage.setItem('pro_subscription_type', subType);
     document.cookie = `pro_key=${proKey}; path=/; max-age=${365 * 24 * 60 * 60}`;
 
     window.dispatchEvent(new CustomEvent('accountStatusChanged', {
@@ -457,7 +485,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">{t('quota_requests_remaining')}</div>
                 </div>
-               
+
                 <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/20 rounded-xl p-4 border border-amber-200 dark:border-amber-700">
                   <div className="flex items-center gap-2 mb-1">
                     <Zap className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -467,11 +495,11 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   </div>
                   <div className="text-sm text-gray-600 dark:text-gray-400 hyphens-none">{t('quota_pro_requests_remaining')}</div>
                 </div>
-               
-                <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 rounded-xl p-4 border border-purple-200 dark:border-purple-700">
+
+                <div className="flex flex-col items-center flex-1 min-w-[200px] bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-xl p-4 border border-blue-200 dark:border-blue-700">
                   <div className="flex items-center gap-2 mb-1">
-                    <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                    <div className="text-[15px] md:text-2xl font-bold text-purple-600 dark:text-purple-400">
+                    <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <div className="text-[15px] md:text-2xl font-bold text-blue-600 dark:text-blue-400">
                       {quotaInfo.expires && new Date(quotaInfo.expires * 1000).toLocaleDateString('de-DE', {
                         day: '2-digit',
                         month: '2-digit',
@@ -489,30 +517,54 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                     ) : null}
                   </div>
                 </div>
-               
+
               </div>
             ) : null}
 
             <div className="space-y-3">
-               { isMobile ? (
-                  <div className="p-4 ml-4 mr-4 bg-gray-100 rounded-lg">  
-                    <p className="text-sm text-gray-600 hyphens-none">
-                     {t('subscription_management_text')}
-                    </p>
+              {isMobile ? (
+                <div className="p-4 ml-4 mr-4 bg-gray-100 rounded-lg">
+                  <p className="text-sm text-gray-600 hyphens-none">
+                    {t('subscription_management_text')}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleManageSubscription}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    <Settings className="w-4 h-4 flex-shrink-0" />
+                    <span className="hyphens-none">{t('pro_statusModal_manageButton')}</span>
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={handleRevealKey}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition-colors"
+              >
+                {showRevealKey ? <EyeOff className="w-4 h-4 flex-shrink-0" /> : <Eye className="w-4 h-4 flex-shrink-0" />}
+                <span className="hyphens-none">{t('pro_statusModal_revealKeyButton')}</span>
+              </button>
+
+              {showRevealKey && revealedKey && (
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 font-mono text-xs text-gray-900 dark:text-white break-all">
+                      {revealedKey}
+                    </div>
+                    <button
+                      onClick={handleCopyRevealedKey}
+                      className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors text-sm font-medium"
+                    >
+                      {keyCopied ? <CheckCircle className="w-4 h-4 flex-shrink-0 text-green-500" /> : <Copy className="w-4 h-4 flex-shrink-0" />}
+                      <span className="hyphens-none">{keyCopied ? t('copied_confirmation') : t('copy_key_action')}</span>
+                    </button>
                   </div>
-                  ) :
-                  (
-                    <>
-                      <button
-                        onClick={handleManageSubscription}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-                      >
-                        <Settings className="w-4 h-4 flex-shrink-0" />
-                        <span className="hyphens-none">{t('pro_statusModal_manageButton')}</span>
-                      </button>
-                    </>
-                  )
-               }
+                </div>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-lg transition-colors"
@@ -537,14 +589,14 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
           className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/50 to-black/60 backdrop-blur-sm"
           onClick={onClose}
         ></div>
-        
-        <div 
+
+        <div
           className="relative max-w-[1000px] max-h-[85vh] flex flex-col bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 z-20 flex-shrink-0 w-10 h-10 min-w-[2.5rem] min-h-[2.5rem] p-0 aspect-square flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-white/50 dark:bg-gray-800/50 rounded-full backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="absolute top-3 right-3 z-20 flex-shrink-0 w-10 h-10 min-w-[2.5rem] min-h-[2.5rem] p-0 aspect-square flex items-center justify-center text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors bg-white/50 dark:bg-gray-800/50 rounded-full backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label="Close"
           >
             <X size={20} />
@@ -557,10 +609,10 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
               </div>
               <div>
                 <h2 className="text-lg sm:text-xl font-bold tracking-tight text-gray-900 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-white dark:via-gray-200 dark:to-gray-400 hyphens-none">
-                    {t('upgrade_pro_title', { appName: 'xPrivo' })}
+                  {t('upgrade_pro_title', { appName: 'xPrivo' })}
                 </h2>
                 <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm font-medium tracking-wide mt-1 hyphens-none">
-                    {t('upgrade_pro_subtitle_short')}
+                  {t('upgrade_pro_subtitle_short')}
                 </p>
               </div>
             </div>
@@ -580,11 +632,12 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                       {price}
                     </span>
                     <span className="ml-1 text-lg font-semibold text-gray-500 dark:text-gray-400 hyphens-none">
-                      /{t('per_month')}{ isMobile ? null : <small>*</small> }
+                      /{t('per_month')}{isMobile ? null : <small>*</small>}
                     </span>
                   </>
                 )}
               </div>
+
               <p className="text-gray-600 dark:text-gray-400 text-sm max-w-md mx-auto hyphens-none">
                 {t('upgrade_pro_feature_intro_subtitle_small')}
               </p>
@@ -592,7 +645,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-6">
               <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
                   <ArrowBigUpDash className="w-4 h-4 text-white" />
                 </div>
                 <div>
@@ -601,12 +654,11 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 </div>
               </div>
               <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
                   <Zap className="w-4 h-4 text-white" />
                 </div>
                 <div>
-
-                  <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none"> {t('upgrade_pro_feature5_title', { proRequestsCount: proRequestsCount })}</div>
+                  <div className="font-medium text-gray-900 dark:text-white text-sm hyphens-none">{t('upgrade_pro_feature5_title', { proRequestsCount: proRequestsCount })}</div>
                   <div className="text-xs text-gray-600 dark:text-gray-400 hyphens-none">{t('upgrade_pro_feature5_description')}</div>
                 </div>
               </div>
@@ -630,11 +682,11 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
               </div>
             </div>
 
-            { isMobile ? ( null ) : (
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+            {isMobile ? null : (
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-50 dark:from-blue-900/20 dark:to-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                 <p className="text-sm text-center sm:text-left text-gray-700 dark:text-gray-300 hyphens-none">
                   {t('upgrade_pro_tryPlus_prompt')}
-                  <button 
+                  <button
                     onClick={handleTryPlus}
                     className="text-blue-600 dark:text-blue-400 hover:underline ml-1 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
                   >
@@ -642,69 +694,67 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   </button>
                 </p>
               </div>
-            )} 
+            )}
 
-             { isMobile ? ( 
-            <div className="max-w-md mx-auto p-6 font-sans bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <h1 className="text-base font-bold text-center text-gray-900 dark:text-white hyphens-none">
-                {t('subscription_details')}
-              </h1>
-       
-              <div className="mt-8 space-y-8">
-                <div>
-                  <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
+            {isMobile ? (
+              <div className="max-w-md mx-auto p-6 font-sans bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <h1 className="text-base font-bold text-center text-gray-900 dark:text-white hyphens-none">
+                  {t('subscription_details')}
+                </h1>
+
+                <div className="mt-8 space-y-8">
+                  <div>
+                    <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
                       {t('subscription_monthly')}
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
-                   {t('subscription_monthly_text')}
-                  </p>
-                </div>
-       
-                <div>
-                  <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
-                    {t('subscription_auto_extend')}
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
-                    {t('subscription_auto_extend_text')}
-                  </p>
-                </div>
-       
-                <div>
-                  <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
-                    {t('subscription_cancellation')}
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
-                    {t('subscription_cancellation_text')}
-                  </p>
-                </div>
-       
-              </div>
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
+                      {t('subscription_monthly_text')}
+                    </p>
+                  </div>
 
-               <div className="mt-10 flex flex-wrap justify-between gap-x-4 gap-y-2">
-              <a href={privacyPolicyUrl} onClick={(e) => handleLinkClick(e, privacyPolicyUrl)} target="_blank" rel="noopener noreferrer" className="text-sm text-green-600 dark:text-green-500 hover:underline hyphens-none">{t('common_privacyPolicy')}</a>
+                  <div>
+                    <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
+                      {t('subscription_auto_extend')}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
+                      {t('subscription_auto_extend_text')}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h2 className="font-medium text-sm font-semibold text-gray-800 dark:text-gray-200 hyphens-none">
+                      {t('subscription_cancellation')}
+                    </h2>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400 hyphens-none">
+                      {t('subscription_cancellation_text')}
+                    </p>
+                  </div>
+
+                </div>
+
+                <div className="mt-10 flex flex-wrap justify-between gap-x-4 gap-y-2">
+                  <a href={privacyPolicyUrl} onClick={(e) => handleLinkClick(e, privacyPolicyUrl)} target="_blank" rel="noopener noreferrer" className="text-sm text-green-600 dark:text-green-500 hover:underline hyphens-none">{t('common_privacyPolicy')}</a>
                   <a href={termsOfServiceUrl} onClick={(e) => handleLinkClick(e, termsOfServiceUrl)} target="_blank" rel="noopener noreferrer" className="text-sm text-green-600 dark:text-green-500 hover:underline hyphens-none">{t('common_termsOfService')}</a>
+                </div>
               </div>
-            </div>
-       
-            ) : null }
+            ) : null}
 
-            <small>{ isMobile ? null : <span className="hyphens-none">* {t('upgrade_no_tax')}</span> } </small>
+            <small>{isMobile ? null : <span className="hyphens-none">* {t('upgrade_no_tax')}</span>}</small>
           </div>
 
           <div className="flex-shrink-0 p-4 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-t border-gray-200 dark:border-gray-800">
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setShowKeyInput(true)}
-                className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 dark:focus:ring-offset-gray-900"
+                className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-gray-900"
               >
                 <div className="flex items-center justify-center gap-2">
-                  {isMobile ? (
+                  {isMobile || isFossAndroid ? (
                     <>
                       <User className="w-4 h-4 flex-shrink-0" />
                       <span className="hyphens-none">{t('login_AccountPRO')}</span>
                     </>
-                  ):
-                  (
+                  ) : (
                     <>
                       <Key className="w-4 h-4 flex-shrink-0" />
                       <span className="hyphens-none">{t('upgrade_pro_useExistingKey_button')}</span>
@@ -712,7 +762,7 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                   )}
                 </div>
               </button>
-              
+
               <button
                 onClick={handleUpgradeToPro}
                 disabled={isUpgrading}
@@ -732,15 +782,13 @@ export function ProOverlay({ isOpen, onClose }: ProOverlayProps) {
                 </div>
               </button>
             </div>
-            {isMobile ? 
+            {isMobile ? (
               <div className="mt-4 text-center">
-               <p className="text-xs text-gray-500 dark:text-gray-400 hyphens-none">
+                <p className="text-xs text-gray-500 dark:text-gray-400 hyphens-none">
                   {t('recurring_payment_notice')}
                 </p>
               </div>
-              : ( 
-                null
-            )}
+            ) : null}
           </div>
         </div>
       </div>

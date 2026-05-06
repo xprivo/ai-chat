@@ -7,6 +7,7 @@ import { Modal } from '../UI/Modal';
 import { Portal } from '../UI/Portal';
 import { ModelSelector } from './ModelSelector';
 import { storage } from '../../utils/storage';
+import { capacitorStorage } from '../../utils/capacitorStorage';
 import { Capacitor } from '@capacitor/core';
 import { AIConsentOverlay, useAIConsent } from '../UI/AIConsentOverlay';
  
@@ -92,17 +93,29 @@ export function ChatInput({
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       setIsMobile(true);
+      return;
+    }
+    // Treat mobile web browsers as mobile (Enter = newline, not send)?
+    const ua = navigator.userAgent;
+    const isMobileUA = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+    if (isMobileUA) {
+      setIsMobile(true);
     }
   }, []);
 
   useEffect(() => {
-    const checkProKey = () => {
-      const proKey = localStorage.getItem('pro_key');
+    const checkProKey = async () => {
+      const proKey = await capacitorStorage.getItem('pro_key');
       setHasProKey(!!proKey);
     };
     checkProKey();
-    window.addEventListener('storage', checkProKey);
-    return () => window.removeEventListener('storage', checkProKey);
+    const handleStorageEvent = () => { checkProKey(); };
+    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('accountStatusChanged', handleStorageEvent);
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('accountStatusChanged', handleStorageEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -202,7 +215,7 @@ export function ChatInput({
     if (e.key === 'Enter') {
 
       if (isMobile) {
-        //On mobile, "Enter" should *always* be a new line.
+        //On mobile, "Enter" should *always* be a new line?!
         return;
       }
 
@@ -336,7 +349,7 @@ export function ChatInput({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    dragCounter.current += 1; // Increment depth
+    dragCounter.current += 1;
 
     if (!isMobile && e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       setIsDragging(true);
@@ -358,34 +371,21 @@ export function ChatInput({
     e.stopPropagation();
   };
 
-const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    setIsDragging(false);
-    dragCounter.current = 0;
+const imageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+  const documentTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'text/plain',
+    'text/csv',
+    'application/json',
+    'text/markdown'
+  ];
 
-    if (isMobile) return;
-
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length === 0) return;
-
-    const file = files[0];
+  const processIncomingFile = (file: File) => {
     const fileType = file.type;
-
-    const imageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
-    const documentTypes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'text/plain',
-      'text/csv',
-      'application/json',
-      'text/markdown'
-    ];
-
     pendingDroppedFile = file;
 
     if (imageTypes.includes(fileType)) {
@@ -401,6 +401,34 @@ const handleDrop = async (e: React.DragEvent) => {
         window.dispatchEvent(event);
       }, 300);
     }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (isMobile) return;
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.kind === 'file' && imageTypes.includes(item.type));
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) {
+        processIncomingFile(file);
+      }
+    }
+  };
+
+const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (isMobile) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    processIncomingFile(files[0]);
   };
 
   const getRequestTypeIcon = (type: RequestType) => {
@@ -651,6 +679,7 @@ const handleDrop = async (e: React.DragEvent) => {
               value={message}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={async () => {
                 if (isMobile) {
                   const granted = await requestConsent();

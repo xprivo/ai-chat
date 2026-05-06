@@ -22,10 +22,7 @@ export function KeyInputOverlay({ isOpen, onClose, onSuccess }: KeyInputOverlayP
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
-      const platform = Capacitor.getPlatform();
-      if (platform === 'ios') {
-        setIsMobile(true);
-      }
+      setIsMobile(true);
     }
   }, []);
 

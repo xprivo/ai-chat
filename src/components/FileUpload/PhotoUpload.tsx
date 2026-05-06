@@ -17,9 +17,7 @@ interface PhotoUploadProps {
     chatId: string;
 }
 
-/**
- * Component to display a prompt for users who need to sign up.
- */
+
 const SignUpPrompt = ({ onClose, t }) => (
     <div className="text-center py-8">
         <Image size={36} className="mx-auto text-gray-400 mb-3 sm:w-12 sm:h-12 sm:mb-4" />
@@ -29,9 +27,6 @@ const SignUpPrompt = ({ onClose, t }) => (
     </div>
 );
 
-/**
- * Handles the file selection via drag-and-drop or file input.
- */
 const FileDropzone = ({ onFileSelect, isDragging, setIsDragging, t }) => {
 
     const [isMobile, setIsMobile] = useState(false);
@@ -101,9 +96,7 @@ const FileDropzone = ({ onFileSelect, isDragging, setIsDragging, t }) => {
     );
 };
 
-/**
- * Shows the success message after image processing.
- */
+
 const SuccessView = ({ imageName, t }) => (
     <div className="text-center py-8">
         <CheckCircle size={48} className="mx-auto text-green-500 mb-4" />
@@ -115,9 +108,6 @@ const SuccessView = ({ imageName, t }) => (
     </div>
 );
 
-/**
- * Displays the image preview, but not for HEIC files.
- */
 const ImagePreview = ({ file }) => {
     const isHeic = file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic');
 

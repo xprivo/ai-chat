@@ -143,8 +143,7 @@ export async function isBookmarked(url: string): Promise<boolean> {
 export function getFaviconForUrl(url: string): string {
   try {
     const hostname = new URL(url).hostname;
-    //TODO: here add your own favicon proxy: return `https://xxx.com/${hostname}`;
-    return '';
+    return `https://degoogled.xprivo.com/${hostname}`;
   } catch {
     return '';
   }
@@ -154,24 +153,21 @@ export function isValidUrl(input: string): boolean {
   if (!input) return false;
   const trimmed = input.trim();
 
-  // 1. Check for Spaces (If it has spaces, it's definitely a search)
+  // Check for Spaces (If it has spaces, it's definitely a search)
   if (/\s/.test(trimmed)) return false;
 
-  // 2. Explicit Protocol or Localhost or IP Address -> ALWAYS URL
+  // Explicit Protocol or Localhost or IP Address -> ALWAYS URL
   // Matches: http://, https://, ftp://, file://, localhost, 192.168.1.1
   if (/^(https?:\/\/|ftp:\/\/|file:\/\/|localhost|(\d{1,3}\.){3}\d{1,3})/.test(trimmed)) {
     try { new URL(trimmed); return true; } catch { return false; }
   }
 
-  // 3. "Lazy" Domain Check (User typed "google.com" without http)
+  // "Lazy" Domain Check (User typed "google.com" without http)
   // We check against a whitelist of common TLDs to prevent "school.pdf" or "user.name" 
   // from being treated as websites.
   const commonTLDs = [
-    // Global
     'com', 'net', 'org', 'edu', 'gov', 'mil', 'int', 'info', 'biz', 'name', 'pro',
-    // Tech / Modern
     'io', 'co', 'app', 'dev', 'ai', 'me', 'tv', 'online', 'store', 'tech', 'site', 'xyz', 'cloud', 'blog',
-    // European / Regional (Add your target regions here)
     'de', 'ch', 'at', 'eu', 'uk', 'fr', 'it', 'es', 'nl', 'pl', 'ru', 'br', 'jp', 'cn', 'in', 'au', 'ca', 'us', 'be', 'lu'
   ];
 

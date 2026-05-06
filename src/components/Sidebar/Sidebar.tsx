@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 
 import { Browser } from '@capacitor/browser';
 import { restorePurchases } from '../../utils/revenueCatDummy';
-import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart, Search, Languages, Check, Lightbulb, SquarePen, Info, Shield, Trash2} from 'lucide-react';
+import { Plus, X, Flame, User, Settings, Globe, Download, Upload, Sparkles, Github, Heart, Gift, ChevronRight, Sun, Moon, Monitor, Palette, Calendar, BrainCircuit, FileText, Mail, HelpCircle, Award, Smartphone, Star, Newspaper, Building2, Volume2, MessageCircleHeart, Search, Globe as Globe2, Languages, Check, Compass, Lightbulb, SquarePen, Info, Shield, Trash2 } from 'lucide-react';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useTheme } from '../../hooks/useTheme';
 import { useDateSetting, useFiles } from '../../hooks/useLocalStorage';
@@ -23,7 +23,7 @@ import { SearchAllChatsOverlay } from './SearchAllChatsOverlay';
 import { SETUP_CONFIG } from '../../config/setup';
 import { storage, chatStore, workspaceStore, fileStore, settingsStore } from '../../utils/storage';
 import { capacitorStorage } from '../../utils/capacitorStorage';
-import { getTonePreference, saveTonePreference } from '../../utils/toneStorage';
+import { getTonePreference, saveTonePreference, getToneNotificationRead, setToneNotificationRead as persistToneNotificationRead } from '../../utils/toneStorage';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -46,6 +46,8 @@ interface SidebarProps {
   onUpdateExperts: (experts: Expert[]) => void;
   onDeleteExpert: (expertId: string) => void;
   onNewChatWithExpert: (expertId: string) => void;
+  onOpenSearchEngine: () => void;
+  onOpenBrowser: () => void;
 }
 
 export function Sidebar({
@@ -69,6 +71,8 @@ export function Sidebar({
   onDeleteExpert,
   onNewChatWithExpert,
   onShowProOverlay,
+  onOpenSearchEngine,
+  onOpenBrowser
 }: SidebarProps) {
   const { t, language, setLanguage } = useTranslation();
   const { theme, setTheme } = useTheme();
@@ -91,6 +95,7 @@ export function Sidebar({
   const [isExpertsFromConsent, setIsExpertsFromConsent] = useState(false);
   const [showToneSelectionOverlay, setShowToneSelectionOverlay] = useState(false);
   const [selectedToneId, setSelectedToneId] = useState<string | null>(null);
+  const [toneNotificationRead, setToneNotificationRead] = useState(true);
   const [isSignedUp, setIsSignedUp] = useState(() => {
     switch (SETUP_CONFIG.pro_switcher) {
       case 'off':
@@ -102,7 +107,9 @@ export function Sidebar({
     }
   });
   const [chatTitles, setChatTitles] = useState<Record<string, string>>({});
-  const [isIOS, setIsIOS] = useState(false); 
+  const [isIOS, setIsIOS] = useState(false);
+  const [isNativeApp, setIsNativeApp] = useState(false);
+  const [isNativeFoss, setIsNativeFoss] = useState(false);
   const [hasProKey, setHasProKey] = useState(false);
   const [showRestoreSuccess, setShowRestoreSuccess] = useState(false);
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
@@ -113,14 +120,17 @@ export function Sidebar({
   const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
-  useEffect(() => {
-    if (Capacitor.isNativePlatform()) {
-      const platform = Capacitor.getPlatform();
-      if (platform === 'ios') {
-        setIsIOS(true);
-      }
-    }
-  }, []);
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      setIsNativeApp(true);
+      const platform = Capacitor.getPlatform();
+      if (platform === 'ios') {
+        setIsIOS(true);
+      } else if (platform === 'android' && SETUP_CONFIG.isFoss) {
+        setIsNativeFoss(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // If iOS browser (not native app) show the "Download app"-button  
@@ -151,11 +161,16 @@ export function Sidebar({
     const loadTonePreference = async () => {
       const toneId = await getTonePreference();
       setSelectedToneId(toneId);
+      const read = await getToneNotificationRead();
+      setToneNotificationRead(read);
     };
     loadTonePreference();
 
-    const handleToneChange = () => {
-      loadTonePreference();
+    const handleToneChange = async () => {
+      const toneId = await getTonePreference();
+      setSelectedToneId(toneId);
+      const read = await getToneNotificationRead();
+      setToneNotificationRead(read);
     };
 
     window.addEventListener('tonePreferenceChanged', handleToneChange);
@@ -217,7 +232,7 @@ export function Sidebar({
 
   const handleLinkClick = async (event: React.MouseEvent<HTMLAnchorElement>, url: string) => {
     event.preventDefault();
-    if (isIOS) {
+    if (isNativeApp) {
       await Browser.open({ url });
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -356,7 +371,7 @@ export function Sidebar({
     switch (SETUP_CONFIG.pro_switcher) {
       case 'off': {
         const url = SETUP_CONFIG.pro_switcher_website;
-        if (isIOS) {
+        if (isNativeApp) {
           await Browser.open({ url });
         } else {
           window.open(url, '_blank', 'noopener,noreferrer');
@@ -383,6 +398,18 @@ export function Sidebar({
       }
     }
   };
+
+
+  const showToneNotification = !!(selectedToneId && selectedToneId !== 'standard' && !toneNotificationRead);
+
+  const handleOpenSettings = async () => {
+    setShowSettings(true);
+    if (!toneNotificationRead) {
+      setToneNotificationRead(true);
+      await persistToneNotificationRead(true);
+      window.dispatchEvent(new CustomEvent('toneNotificationRead'));
+    }
+  };
 
   const customIcon = SETUP_CONFIG.menu_icon ? SETUP_CONFIG.menu_icon : null;
   
@@ -476,10 +503,44 @@ export function Sidebar({
                   {t('newChat')}
                 </button>
 
+            {SETUP_CONFIG.show_search_engine && (
+              <button
+                onClick={onOpenSearchEngine}
+                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+              >
+                <Globe2 size={16} className="flex-shrink-0" />
+                
+                <div className="flex flex-1 items-center justify-between gap-2 text-left">
+                  <span className="truncate">{t('search_engine_button')}</span>
+                  
+                  <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-blue-700 uppercase bg-blue-100 rounded-full dark:bg-blue-500/20 dark:text-blue-400">
+                    {t('general_new')}
+                  </span>
+                </div>
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-auto">
             <div className="py-1">
+         
+             {(isNativeApp && SETUP_CONFIG.show_browser) && (
+                <button
+                  onClick={onOpenBrowser}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
+                >
+                  <Compass size={16} className="flex-shrink-0" />
+                  <span className="flex-1 text-left truncate">
+                    {t('general_privateBrowser')}
+                  </span>
+                  <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-blue-700 uppercase bg-blue-100 rounded-full dark:bg-blue-500/20 dark:text-blue-400">
+                    {t('general_new')}
+                  </span>
+                </button>
+              )}
+                
+            
+
                 <button
                   onClick={() => setShowWorkspaceModal(true)}
                   className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded-lg"
@@ -558,18 +619,18 @@ export function Sidebar({
                   onClick={handleMyAccountClick}
                   className="flex-1 max-w-[90px] sm:max-w-[100px] flex items-center justify-center gap-1 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-[#d9a420]/10 dark:text-[#d9a420] dark:border dark:border-[#d9a420]/20 dark:hover:bg-[#d9a420]/20 whitespace-nowrap"
                 >
-                  {!isIOS && <Info size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />}
+                  {!isNativeApp && <Info size={14} className="sm:w-4 sm:h-4 flex-shrink-0" />}
                   PLUS+
                 </button>
               </div>
 
-              {!isIOS ? (
+              {!isNativeApp ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setShowSettings(true)} className="relative flex items-center gap-1.5 px-2 py-1.5 sm:py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap" title={t('settings')}>
+                    <button onClick={handleOpenSettings} className="relative flex items-center gap-1.5 px-2 py-1.5 sm:py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap" title={t('settings')}>
                       <Settings size={18} />
                       <span>{t('settings')}</span>
-                      {selectedToneId && selectedToneId !== 'standard' && (
+                      {showToneNotification && (
                         <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 text-xs font-semibold text-white bg-red-500 rounded-full">
                           1
                         </span>
@@ -578,7 +639,7 @@ export function Sidebar({
                     <a href={faqUrl} onClick={(e) => handleLinkClick(e, faqUrl)} className="relative flex items-center gap-1.5 px-2 py-1.5 sm:py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors whitespace-nowrap" title={t('settings_faq')}>
                       <HelpCircle size={18} />
                       <span>{t('settings_faq')}</span>
-                    </a>
+                    </a> 
                   </div> 
                   <div className="pt-2 pb-0 sm:pb-0 border-t border-gray-200 dark:border-gray-700">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -587,6 +648,7 @@ export function Sidebar({
                       <a href={sponsorUrl} onClick={(e) => handleLinkClick(e, sponsorUrl)} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"><Heart size={14} /><span>{t('footer_sponsor')}</span></a>
                       {SETUP_CONFIG.invitation === 'on' && (<button onClick={() => setShowInviteFriends(true)} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors whitespace-nowrap"><Gift size={14} /><span>{t('footer_invite')}</span></button>)}
                       <div className="flex items-center gap-[15px]">
+                        {/*<a href={xUrl} onClick={(e) => handleLinkClick(e, xUrl)} target="_blank" rel="noopener noreferrer" aria-label="X"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="X logo"><path d="M12.6.75h2.45l-5.36 6.14L16 15.25h-4.94l-3.87-5.07-4.42 5.07H.32l5.73-6.57L0 .75h5.06l3.49 4.63L12.6.75Zm-.86 13.03h1.36L4.32 2.15H2.87z" /></svg></a>*/}
                         <a 
                           href={redditUrl} 
                           onClick={(e) => handleLinkClick(e, redditUrl)} 
@@ -604,6 +666,8 @@ export function Sidebar({
                             <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z" />
                           </svg>
                         </a>
+                        {/*<a href={instagramUrl} onClick={(e) => handleLinkClick(e, instagramUrl)} target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="Instagram logo"><path d="M8 0C5.829 0 5.556.01 4.703.048 3.85.088 3.269.222 2.76.42a3.9 3.9 0 0 0-1.417.923A3.9 3.9 0 0 0 .42 2.76C.222 3.268.087 3.85.048 4.7.01 5.555 0 5.827 0 8.001c0 2.172.01 2.444.048 3.297.04.852.174 1.433.372 1.942.205.526.478.972.923 1.417.444.445.89.719 1.416.923.51.198 1.09.333 1.942.372C5.555 15.99 5.827 16 8 16s2.444-.01 3.298-.048c.851-.04 1.434-.174 1.943-.372a3.9 3.9 0 0 0 1.416-.923c.445-.445.718-.891.923-1.417.197-.509.332-1.09.372-1.942C15.99 10.445 16 10.173 16 8s-.01-2.445-.048-3.299c-.04-.851-.175-1.433-.372-1.941a3.9 3.9 0 0 0-.923-1.417A3.9 3.9 0 0 0 13.24.42c-.51-.198-1.092-.333-1.943-.372C10.443.01 10.172 0 7.998 0zm-.717 1.442h.718c2.136 0 2.389.007 3.232.046.78.035 1.204.166 1.486.275.373.145.64.319.92.599s.453.546.598.92c.11.281.24.705.275 1.485.039.843.047 1.096.047 3.231s-.008 2.389-.047 3.232c-.035.78-.166 1.203-.275 1.485a2.5 2.5 0 0 1-.599.919c-.28.28-.546.453-.92.598-.28.11-.704.24-1.485.276-.843.038-1.096.047-3.232.047s-2.39-.009-3.233-.047c-.78-.036-1.203-.166-1.485-.276a2.5 2.5 0 0 1-.92-.598 2.5 2.5 0 0 1-.6-.92c-.109-.281-.24-.705-.275-1.485-.038-.843-.046-1.096-.046-3.233s.008-2.388.046-3.231c.036-.78.166-1.204.276-1.486.145-.373.319-.64.599-.92s.546-.453.92-.598c.282-.11.705-.24 1.485-.276.738-.034 1.024-.044 2.515-.045zm4.988 1.328a.96.96 0 1 0 0 1.92.96.96 0 0 0 0-1.92m-4.27 1.122a4.109 4.109 0 1 0 0 8.217 4.109 4.109 0 0 0 0-8.217m0 1.441a2.667 2.667 0 1 1 0 5.334 2.667 2.667 0 0 1 0-5.334"/></svg></a>*/}
+                        {/*<a href={facebookUrl} onClick={(e) => handleLinkClick(e, facebookUrl)} target="_blank" rel="noopener noreferrer" aria-label="Visit my Facebook profile"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-label="Facebook logo"><path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951"/></svg></a>*/}
                       </div>
                     </div>
                   </div>
@@ -611,11 +675,11 @@ export function Sidebar({
               ) : (
                 <div className="pt-2 space-y-3">
                   <div className="bg-gray-100/50 dark:bg-gray-800/50 rounded-xl">
-                    <button onClick={() => setShowSettings(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-xl">
+                    <button onClick={handleOpenSettings} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-200/50 dark:hover:bg-gray-700/50 rounded-xl">
                       <div className="flex items-center gap-3">
                         <Settings size={20} className="text-gray-500 dark:text-gray-400" />
                         <span>{t('settings')}</span>
-                        {selectedToneId && selectedToneId !== 'standard' && (
+                        {showToneNotification && (
                           <span className="flex items-center justify-center w-5 h-5 text-xs font-semibold text-white bg-red-500 rounded-full">
                             1
                           </span>
@@ -677,7 +741,7 @@ export function Sidebar({
 
 
       {showSettings && (
-        !isIOS ? (
+        !isNativeApp ? (
           // --- DESKTOP SETTINGS MODAL ---
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 sm:p-6" 
@@ -948,18 +1012,19 @@ export function Sidebar({
                       </div>
                       <ChevronRight size={16} className="text-gray-400" />
                     </button>
-                    {isIOS && (
+                    {isNativeApp && (
                     <>
                       <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
                       <button onClick={() => setShowDeleteAccountConfirm(true)} className="flex items-center justify-between w-full p-3 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100/50 dark:hover:bg-gray-700/50">
                         <div className="flex items-center gap-3">
                           <Trash2 size={20} className="text-red-500 dark:text-red-400" />
-                          <span>Delete Account</span>
+                          <span>{t('delete_account')}</span>
                         </div>
                         <ChevronRight size={16} className="text-red-400" />
                       </button>
                     </>
                     )}
+                    {!isNativeFoss && (<>
                     <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
                     <button
                       onClick={async () => {
@@ -1015,6 +1080,7 @@ export function Sidebar({
                       </div>
                       <ChevronRight size={16} className="text-gray-400" />
                     </button>
+                    </>)}
                     <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
                     <button onClick={() => setShowSupportOverlay(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-100/50 dark:hover:bg-gray-700/50">
                       <div className="flex items-center gap-3">
@@ -1041,6 +1107,8 @@ export function Sidebar({
                       <ChevronRight size={16} className="text-gray-400" />
                     </a>
 
+                    {isIOS && (
+                    <>
                     <div className="h-px bg-gray-200 dark:bg-gray-700/50 ml-12" />
                     <button onClick={() => setShowRateOverlay(true)} className="flex items-center justify-between w-full p-3 text-sm text-gray-900 dark:text-white hover:bg-gray-100/50 dark:hover:bg-gray-700/50">
                       <div className="flex items-center gap-3">
@@ -1049,6 +1117,8 @@ export function Sidebar({
                       </div>
                       <ChevronRight size={16} className="text-gray-400" />
                     </button>
+                    </>
+                   )}
                   </div>
                 </div>
                 
